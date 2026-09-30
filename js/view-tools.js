@@ -240,7 +240,7 @@
 
   function syncLabel(state) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return t('Нет связи: правки отправятся позже.');
-    return ({ saving: t('Сохраняю…'), saved: t('Всё сохранено.'), error: t('Не удалось сохранить.'), locked: t('Правки закрыты.') })[state] || '';
+    return ({ saving: t('Сохраняю…'), saved: t('Всё сохранено.'), error: t('Не удалось сохранить.'), locked: t('Правки закрыты.'), denied: t('Сервер не принял правку.') })[state] || '';
   }
 
   function storageNote() {

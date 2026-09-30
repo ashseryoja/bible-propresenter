@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // Rules for the shared Bible text: everybody reads, everybody who opened the site may write (anonymous sign-in),
-// but only well-formed chapters, and nothing can be deleted — every saved version stays in the chapter's history.
+// but only well-formed chapters, and nothing can be deleted - every saved version stays in the chapter's history.
 //
 // To freeze editing in an emergency: in the Firebase console open Firestore Database, create the document
 // meta/lock with the boolean field  on = true.  Delete the document (or set on = false) to open editing again.

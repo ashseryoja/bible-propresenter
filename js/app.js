@@ -297,7 +297,10 @@
       }
       st.onStatus = (s) => {
         app.sync = s;
+        // a refused change is taken back on this screen; that is not somebody else's edit
+        if (s === 'locked' || s === 'denied' || s === 'error') app.muteRemoteUntil = Date.now() + 5000;
         if (s === 'locked') AB.ui.toast(t('Сейчас правки закрыты: изменения не сохранены.'), { kind: 'error', duration: 7000 });
+        else if (s === 'denied') AB.ui.toast(t('Сервер не принял правку, она не сохранена. Обновите страницу и попробуйте ещё раз.'), { kind: 'error', duration: 9000 });
         else if (s === 'reconnected') AB.ui.toast(t('Связь с общей версией восстановлена, текст обновлён.'), { kind: 'ok' });
         else if (s === 'error' && !app.warnedStore) {
           app.warnedStore = true;
@@ -367,7 +370,7 @@
 
   function onDataChange(e) {
     if (!e) return;
-    if (e.type === 'remote' && app.shared && e.keys && e.keys.includes(state.b + ':' + state.c)) {
+    if (e.type === 'remote' && app.shared && e.keys && e.keys.includes(state.b + ':' + state.c) && Date.now() > app.muteRemoteUntil) {
       AB.ui.toast(t('Эту главу только что изменил {who}', { who: e.by || t('другой человек') }), { duration: 4000 });
     }
     if (e.type === 'meta') { updateChrome(); if (sideNav) sideNav.refresh(); AB.reader.render({ keepScroll: true }); return; }
@@ -386,7 +389,7 @@
     state, settings, setSetting, goTo, step, loadAll, ensureBook, afterEdit, undo, openEditor, afterEditorClose,
     openChanges: (focus) => AB.viewTools.openChanges(focus),
     openSearch: (o) => AB.viewTools.openSearch(o),
-    boot, warnedStore: false, shared: false, locked: false, leftovers: null, sync: 'saved', syncListeners: new Set(), resolveLeftovers, editedLoaded: Promise.resolve(),
+    boot, warnedStore: false, shared: false, locked: false, leftovers: null, sync: 'saved', syncListeners: new Set(), resolveLeftovers, editedLoaded: Promise.resolve(), muteRemoteUntil: 0,
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

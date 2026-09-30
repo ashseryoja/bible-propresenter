@@ -34,8 +34,16 @@
 
 <script>
   // firebase: null  = every browser keeps its own edits.
-  // firebase: {app: {...}} (from the Firebase console, see README.md) = one shared text for everybody who opens the site.
-  window.AB = { config: { dataMode: 'script', dataBase: 'data/', firebase: null } };
+  // firebase: {app: {...}} = one shared text for everybody who opens the site (project bible-propresenter, see README.md).
+  // These values only say which project to talk to; who may write what is decided by firestore.rules.
+  window.AB = { config: { dataMode: 'script', dataBase: 'data/', firebase: { app: {
+    apiKey: 'AIzaSyBgYu68D2pEA1KhS7YD_piCbGBjsy-y8-Q',
+    authDomain: 'bible-propresenter.firebaseapp.com',
+    projectId: 'bible-propresenter',
+    storageBucket: 'bible-propresenter.firebasestorage.app',
+    messagingSenderId: '496338362385',
+    appId: '1:496338362385:web:b03802aaf5cd3d335a91b0',
+  } } } };
 </script>
 <script src="data/index.js"></script>
 <script src="js/fold.js"></script>

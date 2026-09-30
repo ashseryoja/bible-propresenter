@@ -5,8 +5,9 @@ import os, re
 HERE = os.path.dirname(os.path.abspath(__file__))
 src = open(os.path.join(HERE, '..', 'index.html'), encoding='utf-8').read()
 src = src.replace('src="js/', 'src="../js/').replace('src="data/', 'src="../data/').replace('href="css/', 'href="../css/')
-src = re.sub(r"window\.AB = \{ config: \{[^}]*\} \};",
-             "window.AB = { config: { dataMode: 'script', dataBase: '../data/', firebase: { app: { projectId: 'mock' }, sdkBase: '/tests/mock-sdk/' } } };", src)
+src = re.sub(r"<script>\s*// firebase: null.*?</script>",
+             "<script>window.AB = { config: { dataMode: 'script', dataBase: '../data/', firebase: { app: { projectId: 'mock' }, sdkBase: '/tests/mock-sdk/' } } };</script>",
+             src, count=1, flags=re.S)
 assert 'sdkBase' in src
 src = src.replace('<title>Библия Ararat</title>', '<title>Библия Ararat (тест общей версии)</title>')
 with open(os.path.join(HERE, 'shared.html'), 'w', encoding='utf-8') as f:

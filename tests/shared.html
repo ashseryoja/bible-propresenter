@@ -32,11 +32,7 @@
 <div id="overlay"></div>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script>
-  // firebase: null  = every browser keeps its own edits.
-  // firebase: {app: {...}} (from the Firebase console, see README.md) = one shared text for everybody who opens the site.
-  window.AB = { config: { dataMode: 'script', dataBase: '../data/', firebase: { app: { projectId: 'mock' }, sdkBase: '/tests/mock-sdk/' } } };
-</script>
+<script>window.AB = { config: { dataMode: 'script', dataBase: '../data/', firebase: { app: { projectId: 'mock' }, sdkBase: '/tests/mock-sdk/' } } };</script>
 <script src="../data/index.js"></script>
 <script src="../js/fold.js"></script>
 <script src="../js/sqlite-writer.js"></script>

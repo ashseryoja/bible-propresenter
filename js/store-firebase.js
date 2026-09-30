@@ -60,6 +60,8 @@
       this.fs = fsM;
       const app = appM.initializeApp(cfg.app);
       const auth = authM.getAuth(app);
+      this.auth = auth;
+      this.authM = authM;
       if (cfg.emulator) authM.connectAuthEmulator(auth, cfg.emulator.auth, { disableWarnings: true });
       let db;
       try {
@@ -164,16 +166,34 @@
 
     _fail(err) {
       console.warn(err);
-      this.onStatus(err && err.code === 'permission-denied' ? 'locked' : 'error');
+      const code = err && err.code;
+      if (code === 'permission-denied' || code === 'unauthenticated') this.onStatus(this.locked ? 'locked' : 'denied');
+      else this.onStatus('error');
+    }
+
+    /** A saved identity can be gone (an old device, a cleared account): get a fresh anonymous one. */
+    async _reauth() {
+      try { await this.auth.currentUser.getIdToken(true); }
+      catch (e) { await this.authM.signInAnonymously(this.auth); }
+      this.uid = this.auth.currentUser.uid;
     }
 
     async _write(refDoc, histCol, payload) {
       await this.authReady;
-      const batch = this.fs.writeBatch(this.db);
-      const stamped = Object.assign({ t: this.fs.serverTimestamp(), by: this.author, u: this.uid }, payload);
-      batch.set(refDoc, stamped);
-      batch.set(this.fs.doc(histCol), stamped);
-      await batch.commit();
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const batch = this.fs.writeBatch(this.db);
+          const stamped = Object.assign({ t: this.fs.serverTimestamp(), by: this.author, u: this.uid }, payload);
+          batch.set(refDoc, stamped);
+          batch.set(this.fs.doc(histCol), stamped);
+          await batch.commit();
+          return;
+        } catch (e) {
+          const refused = e && (e.code === 'permission-denied' || e.code === 'unauthenticated');
+          if (attempt === 0 && refused && !this.locked) { await this._reauth(); continue; }
+          throw e;
+        }
+      }
     }
 
     putChapter(key, verses) {
