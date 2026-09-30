@@ -220,9 +220,33 @@
   }
   function pick(o, keys) { const r = {}; for (const k of keys) if (o && typeof o[k] === 'string' && o[k].trim()) r[k] = o[k]; return r; }
 
+  /** Before/after rows for a list of diff operations (see Data.diffVerses). */
+  function diffRows(ops, before, after) {
+    const box = h('div.diff');
+    let n = 0;
+    for (const op of ops) {
+      if (++n > 40) { box.appendChild(h('p.muted', t('…и ещё {n}', { n: ops.length - 40 }))); break; }
+      if (op.t === 'chg') {
+        const d = inlineDiff(before[op.a], after[op.b]);
+        box.appendChild(h('div.d-row', h('span.d-num', String(op.b + 1)), h('div.d-cols', { lang: 'hy' }, h('p.d-old', h('span.d-tag', t('было')), d.a), h('p.d-new', h('span.d-tag', t('стало')), d.b))));
+      } else if (op.t === 'ins') {
+        box.appendChild(h('div.d-row', h('span.d-num', String(op.b + 1)), h('div.d-cols', { lang: 'hy' }, h('p.d-new', h('span.d-tag', t('добавлен')), after[op.b]))));
+      } else {
+        box.appendChild(h('div.d-row', h('span.d-num.del', '\u2013'), h('div.d-cols', { lang: 'hy' }, h('p.d-old', h('span.d-tag', t('удалён (был {n})', { n: op.a + 1 })), before[op.a]))));
+      }
+    }
+    return box;
+  }
+
+  function syncLabel(state) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return t('Нет связи: правки отправятся позже.');
+    return ({ saving: t('Сохраняю…'), saved: t('Всё сохранено.'), error: t('Не удалось сохранить.'), locked: t('Правки закрыты.') })[state] || '';
+  }
+
   function storageNote() {
     const s = D().store;
     if (!s) return null;
+    if (s.kind === 'shared') return { kind: 'ok', shared: true, text: t('Правки общие: их сразу видят все, кто открывает сайт. Каждая версия главы сохраняется в истории.') };
     if (s.kind === 'cloud') return { kind: 'ok', text: t('Правки сохраняются в вашем аккаунте Claude и доступны на других устройствах.') };
     if (s.persistent) return { kind: 'ok', text: t('Правки сохраняются в этом браузере. Чтобы перенести их на другой компьютер, сохраните копию правок ниже.') };
     return { kind: 'warn', text: t('Браузер не разрешает сохранять правки надолго. Сохраните копию правок ниже, чтобы не потерять работу.') };
@@ -248,7 +272,10 @@
     const foot = h('div.foot-col', footHint, mainBtn);
     let busy = false;
     let off = () => {};
-    const sheet = AB.ui.openSheet({ title: t('Правки и экспорт'), className: 'tall', body, footer: foot, onClose: () => off() });
+    let syncEl = null;
+    const onSync = (st) => { if (syncEl) syncEl.textContent = ' ' + syncLabel(st); };
+    app().syncListeners.add(onSync);
+    const sheet = AB.ui.openSheet({ title: t('Правки и экспорт'), className: 'tall', body, footer: foot, onClose: () => { off(); app().syncListeners.delete(onSync); } });
     off = D().onChange((e) => {
       if (busy || sheet.closed) return;
       // typing in the export fields must not redraw them under the cursor
@@ -337,11 +364,12 @@
         if (sum.inserted) chips.appendChild(h('span.chip.add', num(sum.inserted, 'добавлен', 'добавлено', 'добавлено')));
         if (sum.deleted) chips.appendChild(h('span.chip.del', num(sum.deleted, 'удалён', 'удалено', 'удалено')));
         if (renamed) chips.appendChild(h('span.chip', t('переименовано книг: {n}', { n: renamed })));
-        body.appendChild(h('section.card', h('h3', t('Изменено: {a} в {b}', { a: num(sum.touched, 'стих', 'стиха', 'стихов'), b: num(sum.chapters, 'главе', 'главах', 'главах') })), chips));
+        body.appendChild(h('section.card', h('h3', (app().shared ? t('В общей версии изменено: {a} в {b}') : t('Изменено: {a} в {b}')).replace('{a}', num(sum.touched, 'стих', 'стиха', 'стихов')).replace('{b}', num(sum.chapters, 'главе', 'главах', 'главах'))), chips));
         footHint.textContent = t('В файл войдут все {n} правок.', { n: sum.touched + renamed });
       }
       const sn = storageNote();
-      if (sn) body.appendChild(h('p.storage-note.' + sn.kind, icon(sn.kind === 'ok' ? 'check' : 'warn'), sn.text));
+      syncEl = sn && sn.shared ? h('strong.sync', ' ' + syncLabel(app().sync)) : null;
+      if (sn) body.appendChild(h('p.storage-note.' + sn.kind, icon(sn.kind === 'ok' ? 'check' : 'warn'), h('span', sn.text, syncEl)));
 
       // list of changes
       if (sum.list.length) {
@@ -392,7 +420,9 @@
       });
       body.appendChild(h('section.card.tools',
         h('h3', t('Копия правок')),
-        h('p.muted', t('Небольшой файл только с вашими правками. Пригодится, чтобы не потерять работу или продолжить на другом компьютере.')),
+        h('p.muted', app().shared
+          ? t('Файл со всеми правками общей версии. Загрузка такого файла заменит главы в общей версии для всех.')
+          : t('Небольшой файл только с вашими правками. Пригодится, чтобы не потерять работу или продолжить на другом компьютере.')),
         h('div.btn-row',
           h('button.btn', { type: 'button', onclick: async () => {
             try {
@@ -406,7 +436,7 @@
       body.appendChild(h('section.card.tools',
         h('div.btn-row',
           h('button.btn', { type: 'button', onclick: () => openNames() }, icon('languages'), t('Названия книг')),
-          sum.touched || renamed ? AB.ui.confirmButton('.btn.danger', t('Сбросить все правки'), t('Точно сбросить?'), () => {
+          !app().shared && (sum.touched || renamed) ? AB.ui.confirmButton('.btn.danger', t('Сбросить все правки'), t('Точно сбросить?'), () => {
             const n = D().revertAll();
             const m = D().getMeta();
             if (m.bookNames && Object.keys(m.bookNames).length) D().setMeta({ bookNames: {} });
@@ -424,20 +454,7 @@
       let built = false;
       const buildBody = () => {
       built = true;
-      const cur = D().verses(item.b, item.c), base = D().baseVerses(item.b, item.c);
-      const box = h('div.chg-body');
-      let n = 0;
-      for (const op of item.ops) {
-        if (++n > 40) { box.appendChild(h('p.muted', t('…и ещё {n}', { n: item.ops.length - 40 }))); break; }
-        if (op.t === 'chg') {
-          const d = inlineDiff(base[op.a], cur[op.b]);
-          box.appendChild(h('div.d-row', h('span.d-num', String(op.b + 1)), h('div.d-cols', { lang: 'hy' }, h('p.d-old', h('span.d-tag', t('было')), d.a), h('p.d-new', h('span.d-tag', t('стало')), d.b))));
-        } else if (op.t === 'ins') {
-          box.appendChild(h('div.d-row', h('span.d-num', String(op.b + 1)), h('div.d-cols', { lang: 'hy' }, h('p.d-new', h('span.d-tag', t('добавлен')), cur[op.b]))));
-        } else {
-          box.appendChild(h('div.d-row', h('span.d-num.del', '\u2013'), h('div.d-cols', { lang: 'hy' }, h('p.d-old', h('span.d-tag', t('удалён (был {n})', { n: op.a + 1 })), base[op.a]))));
-        }
-      }
+      const box = h('div.chg-body', diffRows(item.ops, D().baseVerses(item.b, item.c), D().verses(item.b, item.c)));
       box.appendChild(h('div.btn-row',
         h('button.btn.compact', { type: 'button', onclick: () => { sheet.close(); app().goTo(item.b, item.c, 0); } }, icon('book'), t('Открыть главу')),
         AB.ui.confirmButton('.btn.compact.danger', t('Вернуть главу'), t('Точно вернуть?'), () => { if (D().revertChapter(item.b, item.c)) app().afterEdit(t('Глава возвращена')); }, 'reset')));
@@ -450,6 +467,62 @@
     }
 
     renderBody();
+    app().editedLoaded.then(() => { if (!sheet.closed && !busy) renderBody(); });
+    return sheet;
+  }
+
+  // ---- history of a chapter (shared version) ---------------------------------------------------------------------
+
+  function openHistory(b, c) {
+    const status = h('p.muted', h('span.spinner'), t('Загружаю историю…'));
+    const list = h('div.hist-list');
+    const body = h('div.history', h('p.muted', t('Здесь сохраняются все версии этой главы: кто и когда её менял. Восстановление создаёт новую версию, старые остаются.')), status, list);
+    const sheet = AB.ui.openSheet({ title: t('История главы'), subtitle: D().bookName(b) + ' ' + c, className: 'tall', body });
+
+    function restore(verses) {
+      D().setChapter(b, c, verses, 'восстановление версии');
+      sheet.close();
+      app().afterEdit(t('Версия восстановлена'));
+    }
+
+    function render(entries) {
+      const base = D().baseVerses(b, c);
+      const cur = D().verses(b, c);
+      const same = (x, y) => x.length === y.length && x.every((v, i) => v === y[i]);
+      if (!entries.length) list.appendChild(h('p.empty', t('Сохранённых версий пока нет. Здесь появятся правки, сделанные в общей версии.')));
+      entries.forEach((en, i) => {
+        const before = i + 1 < entries.length ? (entries[i + 1].verses || base) : base;
+        const after = en.verses || base;
+        const ops = D().diffVerses(before, after);
+        const parts = [];
+        const cnt = (k) => ops.filter((o) => o.t === k).length;
+        if (en.verses === null) parts.push(t('возврат к исходному тексту'));
+        else {
+          if (cnt('chg')) parts.push(num(cnt('chg'), 'изменён', 'изменено', 'изменено'));
+          if (cnt('ins')) parts.push(num(cnt('ins'), 'добавлен', 'добавлено', 'добавлено'));
+          if (cnt('del')) parts.push(num(cnt('del'), 'удалён', 'удалено', 'удалено'));
+        }
+        const isCurrent = same(after, cur);
+        const when = en.t ? new Date(en.t).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : t('только что');
+        const det = h('details.chg', h('summary',
+          h('span.chg-ref', h('span', when), h('span.chg-ru', en.by || t('Аноним'))),
+          h('span.chg-sum', (isCurrent ? t('сейчас · ') : '') + (parts.join(' \u00b7 ') || t('без изменений')))));
+        let built = false;
+        det.addEventListener('toggle', () => {
+          if (!det.open || built) return;
+          built = true;
+          det.appendChild(h('div.chg-body', diffRows(ops, before, after),
+            h('div.btn-row', isCurrent ? h('p.muted', t('Эта версия сейчас в главе.')) : AB.ui.confirmButton('.btn.compact', t('Восстановить эту версию'), t('Точно восстановить?'), () => restore(en.verses), 'reset'))));
+        });
+        list.appendChild(det);
+      });
+      // the text of the module itself
+      const orig = h('div.card', h('h3', t('Исходный текст')), h('p.muted', t('Как в модуле, с которого всё началось.')),
+        D().isEdited(b, c) ? h('div.btn-row', AB.ui.confirmButton('.btn.compact', t('Вернуть исходный текст'), t('Точно вернуть?'), () => restore(null), 'reset')) : h('p.muted', t('Сейчас в главе исходный текст.')));
+      list.appendChild(orig);
+    }
+
+    D().history(b, c, 40).then((entries) => { status.remove(); render(entries); }, () => { status.textContent = t('Не удалось загрузить историю. Проверьте соединение.'); });
     return sheet;
   }
 
@@ -485,6 +558,8 @@
         h('li', t('После каждой правки внизу есть кнопка «Отменить».')),
         h('li', t('Изменённые стихи отмечены оранжевой полоской. Полный список — в «Правки и экспорт».')),
         h('li', t('Поиск не зависит от орфографии: «Աստված» найдёт и «Աստուած».'))),
+      app().shared ? h('h3', t('Общая версия')) : null,
+      app().shared ? h('p', t('Правки общие: любой, кто открыл сайт, видит текст со всеми изменениями и может править. У каждой главы есть «История»: там видно, кто и когда менял, и можно восстановить любую версию. Имя для истории задаётся в меню «⋯».')) : null,
       h('h3', t('Как получить Библию для ProPresenter')),
       h('p', t('Значок с файлом вверху → кнопка «Скачать для ProPresenter (.zip)». В архиве два файла для ProPresenter и инструкция.')), installSteps(),
       h('h3', t('О тексте')),
@@ -498,5 +573,5 @@
     return AB.ui.openSheet({ title: t('Помощь и о тексте'), className: 'tall', body });
   }
 
-  AB.viewTools = { openSearch, openChanges, openNames, openHelp };
+  AB.viewTools = { openSearch, openChanges, openNames, openHelp, openHistory };
 })();

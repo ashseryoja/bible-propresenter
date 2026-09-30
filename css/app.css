@@ -316,6 +316,16 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .opt summary { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 14px; font-weight: 500; cursor: pointer; }
 .opt-body { padding: 0 14px 14px; }
 
+/* shared version */
+.note-card.lock { background: var(--danger-soft); }
+.note-card.lock .note-ico { color: var(--danger); }
+.remote-box { padding: 12px 14px; border-radius: 12px; background: var(--edit-soft); }
+.remote-box p { margin: 0 0 8px; }
+.remote-text { font: 17px/1.55 var(--serif); }
+.sync { color: var(--fg); font-weight: 500; }
+.hist-list { display: flex; flex-direction: column; margin-top: 8px; }
+.history .muted .spinner { margin-right: 8px; }
+
 /* names */
 .nm-list { margin-top: 10px; }
 .nm-row { display: grid; grid-template-columns: 6.6rem minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 0; }

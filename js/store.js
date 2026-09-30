@@ -241,9 +241,34 @@
     }
   }
 
-  /** Chooses the cloud store when this view has `db` + `user`, otherwise the browser store. */
+  /** Everybody edits one shared text (Firebase) when the page is configured for it and can reach it. */
+  async function createShared() {
+    const cfg = AB.config && AB.config.firebase;
+    if (!cfg || !AB.FirebaseStore || AB.platform.hosted || location.protocol === 'file:') return null;
+    try {
+      const store = new AB.FirebaseStore(cfg);
+      const loaded = await store.init();
+      // edits made on this device before the shared version existed: offered to the reader once
+      if (!AB.platform.safeStorage.get('ab.leftoversHandled', false)) {
+        try {
+          const local = new LocalStore();
+          const mine = await local.init();
+          if (mine.chapters.size) store.leftovers = { chapters: mine.chapters, local };
+        } catch (e) { /* nothing to offer */ }
+      }
+      return { store, loaded };
+    } catch (e) {
+      console.warn('The shared version is not reachable, working on this device only.', e);
+      AB.store.sharedError = e;
+      return null;
+    }
+  }
+
+  /** Chooses the shared store, else the cloud store when this view has `db` + `user`, else the browser store. */
   async function create() {
     await AB.platform.ready();
+    const shared = await createShared();
+    if (shared) return shared;
     try {
       const db = await AB.platform.cap('db');
       const user = await AB.platform.cap('user');

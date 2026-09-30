@@ -64,6 +64,7 @@
    */
   function openOps(b, c, v, o) {
     o = o || {};
+    if (app().locked) { AB.ui.toast(t('Правки сейчас закрыты владельцем сайта.'), { kind: 'warn' }); return null; }
     const body = h('div.ops');
     const sheet = AB.ui.openSheet({ title: t('Стих {n}', { n: v }), subtitle: D().bookName(b) + ' ' + c + ':' + v, className: 'compact', body });
     for (const r of opsFor(b, c, v, o.fromEditor)) {
@@ -118,7 +119,9 @@
       openOps(cur.b, cur.c, cur.v, { fromEditor: true, prepare: saveDraftQuietly, done: () => sheet.close() });
     } }, icon('more'), t('Ещё'));
     const actions = h('div.ed-actions', splitBtn, moreBtn);
-    const body = h('div.editor', nav, h('div.ed-field', ta, h('div.ed-meta', counter)), marks, msg, origBox, actions);
+    const remoteBox = h('div.remote-box', { role: 'alert' });
+    remoteBox.hidden = true;
+    const body = h('div.editor', nav, remoteBox, h('div.ed-field', ta, h('div.ed-meta', counter)), marks, msg, origBox, actions);
 
     const saveBtn = h('button.btn.primary.wide', { type: 'button', onclick: () => save() }, icon('check'), t('Сохранить'));
     const cancelBtn = h('button.btn.wide', { type: 'button', onclick: () => sheet.requestClose() }, t('Отмена'));
@@ -127,8 +130,10 @@
     const sheet = AB.ui.openSheet({
       title: '', className: 'editor-sheet', body, footer: footNormal, focus: () => ta,
       beforeClose: () => { if (!dirty()) return true; askDiscard(); return false; },
-      onClose: () => { app().afterEditorClose(cur.b, cur.c, cur.v); },
+      onClose: () => { offRemote(); app().afterEditorClose(cur.b, cur.c, cur.v); },
     });
+    // somebody else changed this verse while it is open here
+    const offRemote = D().onChange((e) => { if (e && e.type === 'remote' && (e.keys || []).includes(cur.b + ':' + cur.c)) checkRemote(); });
 
     const norm = (s) => D().cleanVerse(s);
     const dirty = () => (cur.mode === 'new' ? !!norm(ta.value) : norm(ta.value) !== norm(initial));
@@ -179,7 +184,26 @@
       origBox.appendChild(h('p.orig-text', { lang: 'hy' }, o2.text));
     }
 
+    function checkRemote() {
+      if (cur.mode !== 'edit' || sheet.closed) return;
+      const now = D().verses(cur.b, cur.c)[cur.v - 1];
+      if (now === initial) { remoteBox.hidden = true; return; }
+      AB.ui.clear(remoteBox);
+      remoteBox.hidden = false;
+      if (now === undefined) {
+        remoteBox.append(h('p', h('strong', t('Этот стих удалил другой человек. ')), t('Сохранить нельзя. Скопируйте свой текст, если он нужен, и закройте окно.')), h('button.btn.compact', { type: 'button', onclick: () => sheet.close() }, t('Закрыть')));
+        saveBtn.disabled = true;
+        return;
+      }
+      remoteBox.append(
+        h('p', h('strong', t('Пока вы правили, этот стих изменил другой человек. ')), t('Сейчас в общей версии:')),
+        h('p.remote-text', { lang: 'hy' }, now),
+        h('div.btn-row', h('button.btn.compact', { type: 'button', onclick: () => { initial = now; ta.value = now; remoteBox.hidden = true; updateMeta(); autosize(); renderOrig(); } }, t('Взять новый текст')),
+          h('button.btn.compact', { type: 'button', onclick: () => { initial = now; remoteBox.hidden = true; updateMeta(); renderOrig(); } }, t('Оставить мой'))));
+    }
+
     function load() {
+      remoteBox.hidden = true;
       const vs = D().verses(cur.b, cur.c);
       if (cur.mode === 'new') {
         initial = '';
@@ -234,6 +258,7 @@
     }
 
     function save() {
+      if (!remoteBox.hidden) { say(t('Сначала выберите: взять новый текст или оставить свой.'), 'warn'); return; }
       const text = norm(ta.value);
       if (!text) { say(t('Стих не может быть пустым. Чтобы убрать стих, выберите «Ещё» → «Удалить стих».'), 'bad'); ta.focus(); return; }
       if (enc.encode(text).length > MAX_BYTES) return;
@@ -258,6 +283,7 @@
 
     function doSplit() {
       if (cur.mode !== 'edit') return;
+      if (!remoteBox.hidden) { say(t('Сначала выберите: взять новый текст или оставить свой.'), 'warn'); return; }
       const pos = ta.selectionStart;
       const left = ta.value.slice(0, pos), right = ta.value.slice(pos);
       if (!norm(left) || !norm(right)) { say(t('Поставьте курсор внутри текста, там, где стих должен закончиться.'), 'warn'); ta.focus(); return; }

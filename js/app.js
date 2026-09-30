@@ -11,7 +11,7 @@
 
   const FS_MIN = 16, FS_MAX = 36, FS_STEP = 2;
   const state = { b: 1, c: 1, sel: 0 };
-  const settings = Object.assign({ fs: window.innerWidth < 480 ? 20 : 22, theme: 'auto', onboarded: false }, store.get('ab.settings', {}));
+  const settings = Object.assign({ fs: window.innerWidth < 480 ? 20 : 22, theme: 'auto', onboarded: false, name: '' }, store.get('ab.settings', {}));
   let navToken = 0;
   let sideNav = null;
   const els = {};
@@ -212,6 +212,7 @@
     items.push(item('undo', D.canUndo() ? t('Отменить: {l}', { l: D.lastLabel() }) : t('Отменить последнее'), undo, !D.canUndo()));
     items.push(item('search', t('Найти и заменить'), () => AB.viewTools.openSearch({ replace: true })));
     items.push(item('languages', t('Названия книг'), () => AB.viewTools.openNames()));
+    if (app.shared) items.push(item('pencil', settings.name ? t('Ваше имя: {n}', { n: settings.name }) : t('Ваше имя для истории'), openNameDialog));
     items.push(item('help', t('Помощь и о тексте'), () => AB.viewTools.openHelp()));
     AB.ui.openPopover(els.menu, h('div.menu', items));
     setSize(0);
@@ -230,6 +231,7 @@
   }
 
   function openEditor(b, c, v, o) {
+    if (app.locked) { AB.ui.toast(t('Правки сейчас закрыты владельцем сайта.'), { kind: 'warn' }); return null; }
     if (b !== state.b || c !== state.c) goTo(b, c, v, { select: true, quiet: true });
     else if (!(o && o.mode === 'new') && state.sel !== v) { state.sel = v; AB.reader.applySelection(); }
     return AB.viewEdit.openEditor(b, c, v, o);
@@ -282,11 +284,26 @@
     status(t('Открываю Библию…'));
     try {
       const st = await D.init();
+      app.shared = st.kind === 'shared';
+      if (app.shared) {
+        st.setAuthor(settings.name);
+        st.onLock = (on) => setLocked(on);
+        app.locked = !!st.locked;
+        app.leftovers = st.leftovers || null;
+        if (st.offlineStart) AB.ui.toast(t('Нет связи с общей версией. Показан текст, сохранённый на этом устройстве; свежие правки других появятся, когда связь вернётся.'), { kind: 'warn', duration: 10000 });
+        window.addEventListener('offline', () => AB.ui.toast(t('Нет связи. Правки сохранятся на этом устройстве и отправятся, когда появится интернет.'), { duration: 6000 }));
+      } else if (AB.config && AB.config.firebase && AB.store.sharedError) {
+        AB.ui.toast(t('Общая версия сейчас недоступна: правки сохраняются только на этом устройстве.'), { kind: 'warn', duration: 9000 });
+      }
       st.onStatus = (s) => {
-        if (s === 'error' && !app.warnedStore) {
+        app.sync = s;
+        if (s === 'locked') AB.ui.toast(t('Сейчас правки закрыты: изменения не сохранены.'), { kind: 'error', duration: 7000 });
+        else if (s === 'reconnected') AB.ui.toast(t('Связь с общей версией восстановлена, текст обновлён.'), { kind: 'ok' });
+        else if (s === 'error' && !app.warnedStore) {
           app.warnedStore = true;
-          AB.ui.toast(t('Не удалось сохранить правки. Сохраните копию правок в разделе «Правки и экспорт».'), { kind: 'error', duration: 9000 });
+          AB.ui.toast(app.shared ? t('Не удалось связаться с общей версией. Правки сохранятся, когда связь появится.') : t('Не удалось сохранить правки. Сохраните копию правок в разделе «Правки и экспорт».'), { kind: 'error', duration: 9000 });
         }
+        for (const fn of app.syncListeners) fn(s);
       };
     } catch (e) { console.error(e); AB.ui.toast(t('Хранилище правок недоступно: правки не сохранятся.'), { kind: 'error' }); }
 
@@ -294,9 +311,10 @@
     const start = parseHash() || store.get('ab.pos', null) || { b: 1, c: 1, v: 0 };
     const b0 = start.b >= 1 && start.b <= 66 ? start.b : 1;
     const edited = new Set(D.editedKeys.map((k) => Number(k.split(':')[0])));
-    edited.add(b0);
-    try { await Promise.all([...edited].map((i) => ensureBook(i))); }
+    try { await ensureBook(b0); }
     catch (e) { showLoadError(() => boot()); return; }
+    // the other edited books load in the background; the counter and the list of changes fill in when they are here
+    app.editedLoaded = Promise.all([...edited].filter((i) => i !== b0).map((i) => ensureBook(i))).then(() => { updateBadge(); }, () => {});
 
     sideNav = AB.viewNav.buildNavigator({ onPick: (b, c, v) => goTo(b, c, v, { select: !!v, flash: !!v }), wide: true });
     document.getElementById('sidebar').append(h('div.side-head', icon('book'), h('span', t('Книги и главы'))), sideNav.el);
@@ -305,8 +323,53 @@
     document.documentElement.classList.add('ready');
   }
 
+  function setLocked(on) {
+    app.locked = on;
+    AB.reader.render({ keepScroll: true });
+    AB.ui.toast(on ? t('Владелец сайта закрыл правки. Читать и скачивать можно.') : t('Правки снова открыты.'), { kind: on ? 'warn' : 'ok', duration: 6000 });
+  }
+
+  /** The reader chose what to do with edits made on this device before the shared version existed. */
+  async function resolveLeftovers(add) {
+    const lo = app.leftovers;
+    if (!lo) return;
+    try {
+      if (add) {
+        await loadAll();
+        const changes = new Map();
+        for (const [k, verses] of lo.chapters) { const ok = AB.sanitizeVerses(verses); if (ok) changes.set(k, ok); }
+        if (changes.size) D.commit(changes, 'прежние правки');
+      }
+      await lo.local.clear();
+      store.set('ab.leftoversHandled', true);
+    } catch (e) { console.error(e); AB.ui.toast(t('Не получилось. Попробуйте ещё раз.'), { kind: 'error' }); return; }
+    app.leftovers = null;
+    AB.reader.render({ keepScroll: true });
+    if (add) afterEdit(t('Прежние правки добавлены в общую версию'));
+    else AB.ui.toast(t('Прежние правки удалены с этого устройства'));
+  }
+
+  function openNameDialog() {
+    const input = h('input.field', { id: 'author-name', value: settings.name, maxlength: '40', placeholder: t('Например: Сергей'), autocomplete: 'off' });
+    const save = () => {
+      const v = input.value.replace(/\s+/g, ' ').trim().slice(0, 40);
+      setSetting('name', v);
+      if (D.store && D.store.setAuthor) D.store.setAuthor(v);
+      sheet.close();
+      AB.ui.toast(t('Имя сохранено'));
+    };
+    const body = h('div', h('p.muted', t('Это имя все увидят в истории изменений главы. Можно оставить пустым.')), h('label.lbl', { for: 'author-name' }, t('Ваше имя')), input);
+    const sheet = AB.ui.openSheet({ title: t('Ваше имя'), className: 'compact', body, focus: () => input,
+      footer: h('div.foot-row', h('button.btn.wide', { type: 'button', onclick: () => sheet.close() }, t('Отмена')), h('button.btn.primary.wide', { type: 'button', onclick: save }, t('Сохранить'))) });
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+    return sheet;
+  }
+
   function onDataChange(e) {
     if (!e) return;
+    if (e.type === 'remote' && app.shared && e.keys && e.keys.includes(state.b + ':' + state.c)) {
+      AB.ui.toast(t('Эту главу только что изменил {who}', { who: e.by || t('другой человек') }), { duration: 4000 });
+    }
     if (e.type === 'meta') { updateChrome(); if (sideNav) sideNav.refresh(); AB.reader.render({ keepScroll: true }); return; }
     const need = (e.keys || []).map((k) => Number(k.split(':')[0])).filter((i) => !D.isLoaded(i));
     const go = () => {
@@ -323,7 +386,7 @@
     state, settings, setSetting, goTo, step, loadAll, ensureBook, afterEdit, undo, openEditor, afterEditorClose,
     openChanges: (focus) => AB.viewTools.openChanges(focus),
     openSearch: (o) => AB.viewTools.openSearch(o),
-    boot, warnedStore: false,
+    boot, warnedStore: false, shared: false, locked: false, leftovers: null, sync: 'saved', syncListeners: new Set(), resolveLeftovers, editedLoaded: Promise.resolve(),
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

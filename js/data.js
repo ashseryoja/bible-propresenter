@@ -244,6 +244,19 @@
     return true;
   }
 
+  /** Puts a whole chapter (a saved version) back; null = the original text. */
+  function setChapter(b, c, verses, label) {
+    commit(new Map([[key(b, c), verses && verses.length ? verses.slice() : null]]), label || 'восстановление версии');
+  }
+
+  /** Earlier saved versions of a chapter (only the shared store keeps them). */
+  async function history(b, c, limit) {
+    return store && typeof store.history === 'function' ? store.history(key(b, c), limit) : [];
+  }
+
+  /** Whether the shared store has saved versions of this chapter. */
+  const hasHistory = (b, c) => !!(store && store.stamps && store.stamps.has && store.stamps.has(key(b, c)));
+
   function revertChapter(b, c) {
     if (!isEdited(b, c)) return false;
     commit(new Map([[key(b, c), null]]), 'возврат главы');
@@ -404,8 +417,14 @@
     meta = created.loaded.meta || {};
     store.onRemote = (msg) => {
       if (msg.type === 'meta') { meta = msg.meta; emit({ type: 'remote', keys: [] }); return; }
-      if (msg.verses) overrides.set(msg.key, msg.verses); else overrides.delete(msg.key);
-      emit({ type: 'remote', keys: [msg.key] });
+      const [b, c] = String(msg.key).split(':').map(Number);
+      if (!bookMeta(b) || !(c >= 1 && c <= chapterCount(b))) return;
+      let next = msg.verses && msg.verses.length ? msg.verses : null;
+      if (next && isLoaded(b) && equalArrays(next, baseVerses(b, c))) next = null;      // same as the original text: no edit
+      const cur = overrides.get(msg.key) || null;
+      if ((next === null && cur === null) || (next && cur && equalArrays(next, cur))) return;   // nothing new (the echo of our own change)
+      if (next) overrides.set(msg.key, next); else overrides.delete(msg.key);
+      emit({ type: 'remote', keys: [msg.key], by: msg.by || '' });
     };
     return store;
   }
@@ -424,7 +443,7 @@
   AB.Data = {
     init, tidy, loadBook, loadAll, isLoaded, allLoaded, bookMeta, chapterCount, verses, baseVerses, verseCount, isEdited,
     bookName, summary, chapterDiff, diffVerses, onChange, commit, undo, canUndo, lastLabel,
-    setVerse, insertAfter, deleteVerse, mergeWithNext, splitAt, moveLastToNext, moveFirstToPrev, revertChapter, revertVerse,
+    setVerse, insertAfter, deleteVerse, mergeWithNext, splitAt, moveLastToNext, moveFirstToPrev, setChapter, history, hasHistory, revertChapter, revertVerse,
     revertAll, getMeta, setMeta, setBookName, search, findLiteral, replaceLiteral, exportBooks, backupJson, restoreBackup,
     cleanVerse, key, get store() { return store; }, get editedKeys() { return [...overrides.keys()]; },
   };

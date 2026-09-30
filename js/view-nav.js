@@ -147,10 +147,30 @@
     const hint = [];
     if (b === 19) hint.push(t('В русской Библии: Пс. {n}', { n: AB.refs.psalmToRu(c) }));
     const wrap = h('div.chead', kids, hint.length ? h('p.ch-hint', icon('info'), hint.join(' ')) : null);
+    const chips = h('div.chips');
     if (changedCount) {
-      wrap.appendChild(h('button.chip.edit', { type: 'button', onclick: () => app().openChanges({ b, c }) }, h('span.dot'), t('Изменено в этой главе: {n}', { n: changedCount }), icon('right')));
+      chips.appendChild(h('button.chip.edit', { type: 'button', onclick: () => app().openChanges({ b, c }) }, h('span.dot'), t('Изменено в этой главе: {n}', { n: changedCount }), icon('right')));
     }
+    if (app().shared && (D().isEdited(b, c) || D().hasHistory(b, c))) {
+      chips.appendChild(h('button.chip', { type: 'button', onclick: () => AB.viewTools.openHistory(b, c) }, icon('reset'), t('История главы')));
+    }
+    if (chips.childNodes.length) wrap.appendChild(chips);
     return wrap;
+  }
+
+  function lockCard() {
+    return h('div.note-card.lock', { role: 'note' }, icon('warn', 'note-ico'),
+      h('p', h('strong', t('Правки закрыты. ')), t('Владелец сайта временно остановил правки. Читать, искать и скачивать можно.')));
+  }
+
+  /** Edits made on this device before the shared version existed. */
+  function leftoversCard() {
+    const n = app().leftovers.chapters.size;
+    return h('div.hint-card', { role: 'note' }, icon('info', 'hint-ico'),
+      h('div.hint-text', h('strong', t('Ваши прежние правки')),
+        h('p', t('На этом устройстве сохранены правки в {n}, сделанные до общей версии. Добавить их в общую версию?', { n: num(n, 'главе', 'главах', 'главах') })),
+        h('div.btn-row', h('button.btn.primary.compact', { type: 'button', onclick: () => app().resolveLeftovers(true) }, t('Добавить')),
+          AB.ui.confirmButton('.btn.compact', t('Не нужны'), t('Точно удалить?'), () => app().resolveLeftovers(false)))));
   }
 
   function onboardingBanner() {
@@ -158,21 +178,24 @@
     const close = h('button.icon-btn.small', { type: 'button', 'aria-label': t('Закрыть подсказку'), onclick: () => { app().setSetting('onboarded', true); box.remove(); } }, icon('x'));
     const box = h('div.hint-card', { role: 'note' },
       icon('pencil', 'hint-ico'),
-      h('div.hint-text', h('strong', t('Как править')), h('p', t('Нажмите на любой стих и выберите «Править». Готовую Библию для ProPresenter скачайте через значок с файлом вверху.'))),
+      h('div.hint-text', h('strong', t('Как править')), h('p', app().shared
+        ? t('Нажмите на любой стих и выберите «Править». Правки общие: их сразу увидят все, кто открывает сайт. Готовую Библию для ProPresenter скачайте через значок с файлом вверху.')
+        : t('Нажмите на любой стих и выберите «Править». Готовую Библию для ProPresenter скачайте через значок с файлом вверху.'))),
       close);
     return box;
   }
 
   function buildBar(b, c, v, text) {
+    const locked = app().locked;
     const bar = h('div.vbar', { role: 'group', 'aria-label': t('Действия со стихом {n}', { n: v }) },
-      h('button.btn.primary.compact', { type: 'button', onclick: (e) => { e.stopPropagation(); app().openEditor(b, c, v); } }, icon('pencil'), t('Править')),
+      locked ? null : h('button.btn.primary.compact', { type: 'button', onclick: (e) => { e.stopPropagation(); app().openEditor(b, c, v); } }, icon('pencil'), t('Править')),
       h('button.btn.compact', { type: 'button', onclick: async (e) => {
         e.stopPropagation();
         const ref = D().bookName(b) + ' ' + c + ':' + v;
         const ok = await AB.platform.copyText(ref + ' — ' + text);
         AB.ui.toast(ok ? t('Скопировано') : t('Не удалось скопировать'), { kind: ok ? 'ok' : 'warn' });
       } }, icon('copy'), t('Копировать')),
-      h('button.btn.compact.icon-only', { type: 'button', 'aria-haspopup': 'dialog', 'aria-label': t('Ещё'), title: t('Ещё: вставить, объединить, удалить, перенести'), onclick: (e) => { e.stopPropagation(); AB.viewEdit.openOps(b, c, v); } }, icon('more')));
+      locked ? null : h('button.btn.compact.icon-only', { type: 'button', 'aria-haspopup': 'dialog', 'aria-label': t('Ещё'), title: t('Ещё: вставить, объединить, удалить, перенести'), onclick: (e) => { e.stopPropagation(); AB.viewEdit.openOps(b, c, v); } }, icon('more')));
     return bar;
   }
 
@@ -198,6 +221,8 @@
       const noteVerses = new Set(notes.map((n) => n.v));
 
       host.appendChild(chapterHead(b, c, touched));
+      if (app().locked) host.appendChild(lockCard());
+      if (app().leftovers) host.appendChild(leftoversCard());
       const ob = onboardingBanner();
       if (ob) host.appendChild(ob);
       for (const s of notesSummary(notes)) {
