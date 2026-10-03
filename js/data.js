@@ -14,6 +14,7 @@
   let store = null;
   let overrides = new Map();          // "b:c" -> verses[] (only chapters that differ from the base)
   let meta = {};
+  let reviews = new Map();            // "b:c" -> { done, t, by }   "this chapter has been read through"
   const listeners = new Set();
   const loading = new Map();
   const undoStack = [];
@@ -296,6 +297,48 @@
     setMeta({ bookNames: names });
   }
 
+  // review marks ----------------------------------------------------------------------------------------------------
+
+  const review = (b, c) => reviews.get(key(b, c)) || null;
+  const isReviewed = (b, c) => { const r = reviews.get(key(b, c)); return !!(r && r.done); };
+
+  /** How many chapters of a book are marked as read through. */
+  function reviewedCount(b) {
+    let n = 0;
+    for (const [k, r] of reviews) if (r.done && Number(k.split(':')[0]) === b) n += 1;
+    return n;
+  }
+
+  function reviewedTotal() {
+    let n = 0;
+    for (const r of reviews.values()) if (r.done) n += 1;
+    return n;
+  }
+
+  /** The chapter was edited after it had been marked as read through (only the shared store knows edit times). */
+  function editedAfterReview(b, c) {
+    const r = review(b, c);
+    const stamps = store && store.stamps;
+    if (!r || !r.done || !stamps) return false;
+    const edited = stamps.get(key(b, c)) || 0;
+    return edited > r.t + 2000;
+  }
+
+  /** Marks the chapter (on = true) or takes the mark back. Optimistic: the screen changes at once, a refusal puts it back. */
+  async function setReviewed(b, c, on) {
+    const k = key(b, c);
+    const prev = reviews.get(k) || null;
+    reviews.set(k, { done: !!on, t: Date.now(), by: (store && store.author) || '' });
+    emit({ type: 'review', keys: [k] });
+    try {
+      if (store && store.putReview) await store.putReview(k, !!on);
+    } catch (e) {
+      if (prev) reviews.set(k, prev); else reviews.delete(k);
+      emit({ type: 'review', keys: [k] });
+      throw e;
+    }
+  }
+
   // search --------------------------------------------------------------------------------------------------------
 
   const foldCache = new WeakMap();
@@ -415,14 +458,28 @@
     store = created.store;
     overrides = created.loaded.chapters;
     meta = created.loaded.meta || {};
+    reviews = created.loaded.reviews || new Map();
     store.onRemote = (msg) => {
       if (msg.type === 'meta') { meta = msg.meta; emit({ type: 'remote', keys: [] }); return; }
+      if (msg.type === 'review') {
+        const cur = reviews.get(msg.key) || null;
+        const next = msg.review || null;
+        const curDone = !!(cur && cur.done), nextDone = !!(next && next.done);
+        if (next) reviews.set(msg.key, next); else reviews.delete(msg.key);
+        if (cur && next && cur.t === next.t && cur.done === next.done) return;
+        // remote = the mark really flipped (the echo of our own write only brings the server time and name)
+        emit({ type: 'review', keys: [msg.key], by: (next && next.by) || '', remote: curDone !== nextDone });
+        return;
+      }
       const [b, c] = String(msg.key).split(':').map(Number);
       if (!bookMeta(b) || !(c >= 1 && c <= chapterCount(b))) return;
       let next = msg.verses && msg.verses.length ? msg.verses : null;
       if (next && isLoaded(b) && equalArrays(next, baseVerses(b, c))) next = null;      // same as the original text: no edit
       const cur = overrides.get(msg.key) || null;
-      if ((next === null && cur === null) || (next && cur && equalArrays(next, cur))) return;   // nothing new (the echo of our own change)
+      if ((next === null && cur === null) || (next && cur && equalArrays(next, cur))) {         // nothing new (the echo of our own change)
+        if (isReviewed(b, c)) emit({ type: 'stamp', keys: [msg.key] });                        // ...but the edit time is now known
+        return;
+      }
       if (next) overrides.set(msg.key, next); else overrides.delete(msg.key);
       emit({ type: 'remote', keys: [msg.key], by: msg.by || '' });
     };
@@ -445,6 +502,7 @@
     bookName, summary, chapterDiff, diffVerses, onChange, commit, undo, canUndo, lastLabel,
     setVerse, insertAfter, deleteVerse, mergeWithNext, splitAt, moveLastToNext, moveFirstToPrev, setChapter, history, hasHistory, revertChapter, revertVerse,
     revertAll, getMeta, setMeta, setBookName, search, findLiteral, replaceLiteral, exportBooks, backupJson, restoreBackup,
+    review, isReviewed, reviewedCount, reviewedTotal, editedAfterReview, setReviewed,
     cleanVerse, key, get store() { return store; }, get editedKeys() { return [...overrides.keys()]; },
   };
 })();

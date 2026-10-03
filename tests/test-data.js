@@ -14,15 +14,18 @@ for (const b of AB.index.books) AB.data[b.i] = JSON.parse(fs.readFileSync(path.j
 
 // memory store standing in for IndexedDB
 const saved = new Map();
+const reviewsSaved = new Map();
 let savedMeta = {};
+let failNextReview = false;
 AB.store = {
   create: async () => ({
     store: {
       kind: 'test', persistent: true, onRemote: null,
       putChapter: async (k, v) => { if (v) saved.set(k, v); else saved.delete(k); },
       putMeta: async (m) => { savedMeta = m; },
+      putReview: async (k, d) => { if (failNextReview) { failNextReview = false; const e = new Error('denied'); e.code = 'permission-denied'; throw e; } reviewsSaved.set(k, d); },
     },
-    loaded: { chapters: new Map(), meta: {} },
+    loaded: { chapters: new Map(), meta: {}, reviews: new Map() },
   }),
 };
 
@@ -89,6 +92,18 @@ const D = AB.Data;
   ok(exported.length === 66 && exported[0].chapters.length === 50, 'exportBooks shape');
   D.undo();
   ok(D.findLiteral('Երուսաղեմ').length === before && D.summary().touched === 0, 'undo of replace');
+
+  // review marks ("chapter read through")
+  ok(!D.isReviewed(19, 23) && D.reviewedCount(19) === 0 && D.reviewedTotal() === 0, 'no review marks at start');
+  await D.setReviewed(19, 23, true);
+  ok(D.isReviewed(19, 23) && D.review(19, 23).done && D.reviewedCount(19) === 1 && D.reviewedTotal() === 1 && reviewsSaved.get('19:23') === true, 'review mark stored');
+  await D.setReviewed(19, 23, false);
+  ok(!D.isReviewed(19, 23) && D.reviewedCount(19) === 0 && reviewsSaved.get('19:23') === false, 'review mark taken back');
+  failNextReview = true;
+  let rejected = false;
+  try { await D.setReviewed(1, 1, true); } catch (e) { rejected = true; }
+  ok(rejected && !D.isReviewed(1, 1) && D.reviewedTotal() === 0, 'a refused mark is put back');
+  ok(D.summary().touched === 0, 'review marks are not text edits');
 
   // backup round trip
   D.setVerse(43, 3, 16, 'Փորձ');

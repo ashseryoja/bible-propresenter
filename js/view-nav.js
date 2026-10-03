@@ -50,6 +50,15 @@
       render();
     });
 
+    /** Green check with the number of chapters marked as read through (only the check when the whole book is done). */
+    function doneBadge(bm) {
+      const done = D().reviewedCount(bm.i);
+      if (!done) return null;
+      const all = done === bm.vs.length;
+      const label = all ? t('Все главы просмотрены') : t('Просмотрено глав: {d} из {n}', { d: done, n: bm.vs.length });
+      return h('span.nb-done' + (all ? '.all' : ''), { title: label, 'aria-label': label }, icon('checkDone'), all ? null : String(done));
+    }
+
     function editedBooks() {
       const s = new Set();
       for (const k of D().editedKeys) s.add(Number(k.split(':')[0]));
@@ -78,6 +87,7 @@
         const head = h('button.nb-head', { type: 'button', 'aria-expanded': isOpen ? 'true' : 'false', onclick: () => { openBook = isOpen ? 0 : bm.i; render(); if (!isOpen) scrollToOpen(); } },
           h('span.nb-names', h('span.nb-hy', { lang: 'hy' }, D().bookName(bm.i)), h('span.nb-ru', bm.ru)),
           edited.has(bm.i) ? h('span.dot', { title: t('В этой книге есть правки'), 'aria-label': t('есть правки') }) : null,
+          doneBadge(bm),
           h('span.nb-count', String(bm.vs.length)),
           icon(isOpen ? 'up' : 'down', 'nb-chev'));
         const row = h('div.nb' + (isOpen ? '.open' : '') + (cur.b === bm.i ? '.current' : ''), head);
@@ -85,9 +95,10 @@
           const grid = h('div.ch-grid', { role: 'group', 'aria-label': t('Главы') });
           for (let c = 1; c <= bm.vs.length; c++) {
             const isCur = cur.b === bm.i && cur.c === c;
-            grid.appendChild(h('button.ch' + (isCur ? '.cur' : '') + (D().isEdited(bm.i, c) ? '.edited' : ''), {
-              type: 'button', 'aria-label': t('Глава {n}', { n: c }) + (D().isEdited(bm.i, c) ? ', ' + t('есть правки') : ''), 'aria-current': isCur ? 'true' : null,
-              onclick: () => opts.onPick(bm.i, c, 0),
+            const isRev = D().isReviewed(bm.i, c);
+            grid.appendChild(h('button.ch' + (isCur ? '.cur' : '') + (D().isEdited(bm.i, c) ? '.edited' : '') + (isRev ? '.reviewed' : ''), {
+              type: 'button', 'aria-current': isCur ? 'true' : null, onclick: () => opts.onPick(bm.i, c, 0),
+              'aria-label': t('Глава {n}', { n: c }) + (isRev ? ', ' + t('просмотрена') : '') + (D().isEdited(bm.i, c) ? ', ' + t('есть правки') : ''),
             }, String(c)));
           }
           row.appendChild(grid);
@@ -151,6 +162,24 @@
     return [from, to];
   }
 
+  const fmtWhen = (ms) => (ms ? new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '');
+  const reviewLine = (r) => t('Глава полностью просмотрена') + (r.t ? ' · ' + fmtWhen(r.t) : '') + (r.by ? ' · ' + r.by : '');
+
+  /** The end of the chapter: "this chapter has been read through", or the mark with who and when. */
+  function reviewBox(b, c) {
+    const r = D().review(b, c);
+    const attrs = { role: 'group', 'aria-label': t('Отметка о просмотре главы') };
+    if (r && r.done) {
+      return h('div.review-box', attrs,
+        h('p.done-line', icon('checkDone'), h('span', reviewLine(r))),
+        D().editedAfterReview(b, c) ? h('p.muted.review-hint', icon('warn'), ' ' + t('После отметки в главе были правки — стоит просмотреть её ещё раз.')) : null,
+        app().locked ? null : h('button.btn.compact.quiet', { type: 'button', onclick: () => app().toggleReview(b, c) }, t('Снять отметку')));
+    }
+    return h('div.review-box', attrs,
+      h('button.btn.big.done-btn', { type: 'button', disabled: app().locked ? true : null, onclick: () => app().toggleReview(b, c) }, icon('checkCircle'), t('Эта глава полностью просмотрена')),
+      h('p.muted.review-hint', app().shared ? t('Отметку увидят все: в списке глав у этой главы появится зелёная галочка.') : t('В списке глав у этой главы появится зелёная галочка.')));
+  }
+
   function chapterHead(b, c, changedCount) {
     const bm = D().bookMeta(b);
     const kids = [
@@ -167,6 +196,11 @@
     }
     if (app().shared && (D().isEdited(b, c) || D().hasHistory(b, c))) {
       chips.appendChild(h('button.chip', { type: 'button', onclick: () => AB.viewTools.openHistory(b, c) }, icon('reset'), t('История главы')));
+    }
+    const r = D().review(b, c);
+    if (r && r.done) {
+      chips.appendChild(h('span.chip.done', { title: reviewLine(r) }, icon('checkDone'), t('Просмотрена') + (r.t ? ' · ' + fmtWhen(r.t) : '') + (r.by ? ' · ' + r.by : '')));
+      if (D().editedAfterReview(b, c)) chips.appendChild(h('span.chip.warn', icon('warn'), t('После просмотра были правки')));
     }
     if (chips.childNodes.length) wrap.appendChild(chips);
     return wrap;
@@ -279,6 +313,7 @@
       body.append(...deletedRows(vs.length));
       host.appendChild(body);
       host.appendChild(h('p.ch-end', vs.length === 0 ? '' : num(vs.length, 'стих', 'стиха', 'стихов') + ' · ' + t('конец главы')));
+      host.appendChild(reviewBox(b, c));
 
       this.applySelection();
       if (opts && opts.keepScroll) window.scrollTo(0, y);

@@ -111,6 +111,13 @@ function allowed(path, d, uid) {
     if (seg.length === 2 && data[path] !== undefined && false) return 'x';
     return true;
   }
+  if (seg[0] === 'reviews' && seg.length === 2) {
+    const m = /^(\d{1,2})_(\d{1,3})$/.exec(seg[1]);
+    if (!m || +m[1] < 1 || +m[1] > 66 || +m[2] < 1 || +m[2] > 150) return 'bad chapter id';
+    if (!keysOk(['done', 't', 'by', 'u']) || !stamped()) return 'bad review fields';
+    if (typeof d.done !== 'boolean') return 'bad done';
+    return true;
+  }
   if (seg[0] === 'meta' && seg[1] === 'site' && (seg.length === 2 || (seg[2] === 'history' && seg.length === 4))) {
     if (!keysOk(['bookNames', 't', 'by', 'u']) || !stamped()) return 'bad meta fields';
     if (!d.bookNames || typeof d.bookNames !== 'object' || Array.isArray(d.bookNames) || Object.keys(d.bookNames).length > 66) return 'bad names';

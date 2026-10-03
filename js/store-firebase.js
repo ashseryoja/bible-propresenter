@@ -6,6 +6,7 @@
  *   chapters/{book}_{chapter}                 { v: [verses] | null (= original text), t: server time, by: name, u: uid }
  *   chapters/{book}_{chapter}/history/{auto}  the same fields, one document per saved version (create-only)
  *   meta/site                                 { bookNames: {idx: name}, t, by, u }      (book titles are shared)
+ *   reviews/{book}_{chapter}                  { done: bool, t, by, u }   "this chapter has been read through" (no history)
  *   meta/lock                                 { on: true }  -- set by hand in the Firebase console to freeze editing
  * Export settings (name, abbreviations) and other device-only values stay in this browser.
  *
@@ -81,6 +82,7 @@
       this.authReady.catch((e) => { console.warn('anonymous sign-in failed', e); this.onStatus('error'); });
 
       const chapters = new Map();
+      const reviews = new Map();
       let shared = {};
       const answers = await Promise.all([
         this._firstSnapshot(fsM.collection(db, 'chapters'), (snap) => {
@@ -96,16 +98,20 @@
           const on = !!(snap.exists() && snap.data().on === true);
           if (on !== this.locked) { this.locked = on; this.onLock(on); }
         }),
+        // review marks are optional: a project whose rules do not know the collection yet must still open
+        this._firstSnapshot(fsM.collection(db, 'reviews'), (snap) => {
+          snap.docs.forEach((d) => { const r = this._parseReview(d); if (r) reviews.set(r.key, r); });
+        }, (snap) => this._reviewChanges(snap), (err) => { console.warn('review marks unavailable', err); this.reviewsUnavailable = true; }),
       ]);
       this.sharedMeta = shared;
       this.ready = true;
       this.offlineStart = !answers[0];          // the text below came from this device's cache, the server did not answer yet
-      return { chapters, meta: this._mergeMeta(shared) };
+      return { chapters, meta: this._mergeMeta(shared), reviews };
     }
 
     /** Resolves with the first answer from the server (or from the cache when offline / slow), then keeps calling onChange.
      *  The value is true when the server answered. */
-    _firstSnapshot(ref, onFirst, onChange) {
+    _firstSnapshot(ref, onFirst, onChange, onError) {
       return new Promise((resolve) => {
         let first = true;
         let served = false;
@@ -117,7 +123,26 @@
             served = served || !snap.metadata.fromCache;
             if (served || navigator.onLine === false) finish();
           } else onChange(snap);
-        }, (err) => { console.warn('listener failed', err); this._fail(err); finish(); });
+        }, (err) => { if (onError) onError(err); else { console.warn('listener failed', err); this._fail(err); } finish(); });
+      });
+    }
+
+    _parseReview(d) {
+      const m = ID_RE.exec(d.id);
+      if (!m) return null;
+      const b = Number(m[1]), c = Number(m[2]);
+      const meta = AB.index && AB.index.books[b - 1];
+      if (!meta || c < 1 || c > meta.vs.length) return null;
+      const data = d.data({ serverTimestamps: 'estimate' }) || {};
+      return { key: b + ':' + c, done: data.done === true, t: millis(data.t), by: typeof data.by === 'string' ? data.by : '' };
+    }
+
+    _reviewChanges(snap) {
+      snap.docChanges().forEach((ch) => {
+        if (ch.doc.metadata.hasPendingWrites) return;
+        const r = this._parseReview(ch.doc);
+        if (!r) return;
+        if (this.onRemote) this.onRemote({ type: 'review', key: r.key, review: ch.type === 'removed' ? null : r });
       });
     }
 
@@ -215,6 +240,36 @@
         this._track(this._write(fs.doc(this.db, 'meta', 'site'), fs.collection(this.db, 'meta', 'site', 'history'), { bookNames: names }));
       }
       return Promise.resolve();
+    }
+
+    /** "This chapter has been read through" (or the mark taken back). Rejects when the server refuses, so the screen can undo. */
+    async putReview(key, done) {
+      const id = key.replace(':', '_');
+      this.pending += 1;
+      this.onStatus('saving');
+      try {
+        await this.authReady;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            const batch = this.fs.writeBatch(this.db);
+            batch.set(this.fs.doc(this.db, 'reviews', id), { done: !!done, t: this.fs.serverTimestamp(), by: this.author, u: this.uid });
+            await batch.commit();
+            break;
+          } catch (e) {
+            const refused = e && (e.code === 'permission-denied' || e.code === 'unauthenticated');
+            if (attempt === 0 && refused && !this.locked) { await this._reauth(); continue; }
+            throw e;
+          }
+        }
+        this.pending -= 1;
+        if (!this.pending) this.onStatus('saved');
+      } catch (e) {
+        this.pending -= 1;
+        console.warn(e);
+        if (this.locked && e && e.code === 'permission-denied') this.onStatus('locked');
+        else this.onStatus(this.pending ? 'saving' : 'saved');     // the caller tells the reader; the text itself is fine
+        throw e;
+      }
     }
 
     /** Saved versions of a chapter, newest first: [{verses|null, t, by}] */

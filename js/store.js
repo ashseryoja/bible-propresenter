@@ -2,6 +2,7 @@
  * Where the edits live. Only what the reader changed is stored — the base text ships with the page.
  *   chapters: Map  "book:chapter" -> array of verse strings (the whole edited chapter)
  *   meta:     { name, abbr, slotAbbr, bookNames:{idx:name}, exportedAt }
+ *   reviews:  Map  "book:chapter" -> { done, t, by }   ("this chapter has been read through")
  * LocalStore keeps them in this browser (IndexedDB, then localStorage, then memory).
  * CloudStore keeps them in the artifact's private per-viewer area of the `db` capability, so they follow
  * the person to their other devices.
@@ -53,13 +54,17 @@
 
     async init() {
       const chapters = new Map();
+      const reviews = new Map();
       let meta = {};
+      const takeReviews = (obj) => { for (const [k, r] of Object.entries(obj || {})) if (r && typeof r === 'object') reviews.set(k, { done: r.done === true, t: Number(r.t) || 0, by: typeof r.by === 'string' ? r.by : '' }); };
       try {
         this.db = await idbOpen();
         const rows = (await idbTx(this.db, 'chapters', 'readonly', (s) => s.getAll())) || [];
         for (const r of rows) if (r && r.key && Array.isArray(r.verses)) chapters.set(r.key, r.verses);
         const m = await idbTx(this.db, 'meta', 'readonly', (s) => s.get('meta'));
         if (m && m.value) meta = m.value;
+        const rv = await idbTx(this.db, 'meta', 'readonly', (s) => s.get('reviews'));
+        if (rv && rv.value) takeReviews(rv.value);
         this.persistent = true;
       } catch (e) {
         this.db = null;
@@ -68,21 +73,40 @@
           if (raw) {
             for (const [k, v] of Object.entries(raw.chapters || {})) if (Array.isArray(v)) chapters.set(k, v);
             meta = raw.meta || {};
+            takeReviews(raw.reviews);
           }
           this.useLs = AB.platform.safeStorage.set('ab.probe', 1);
           this.persistent = this.useLs;
         } catch (e2) { this.persistent = false; }
       }
-      this.mem = { chapters: new Map(chapters), meta: Object.assign({}, meta) };
-      return { chapters, meta };
+      this.mem = { chapters: new Map(chapters), meta: Object.assign({}, meta), reviews: new Map(reviews) };
+      return { chapters, meta, reviews };
     }
 
     _persistLs() {
       const chapters = {};
       for (const [k, v] of this.mem.chapters) chapters[k] = v;
-      const ok = AB.platform.safeStorage.set('ab.edits2', { chapters, meta: this.mem.meta });
+      const ok = AB.platform.safeStorage.set('ab.edits2', { chapters, meta: this.mem.meta, reviews: this._reviewsObj() });
       this.persistent = ok;
       if (!ok) this.onStatus('error');
+    }
+
+    _reviewsObj() {
+      const out = {};
+      for (const [k, r] of this.mem.reviews) out[k] = r;
+      return out;
+    }
+
+    async putReview(key, done) {
+      this.mem.reviews.set(key, { done: !!done, t: Date.now(), by: '' });
+      try {
+        if (this.db) await idbTx(this.db, 'meta', 'readwrite', (s) => s.put({ k: 'reviews', value: this._reviewsObj() }));
+        else if (this.useLs) this._persistLs();
+        this.onStatus('saved');
+      } catch (e) {
+        this.onStatus('error');
+        throw e;
+      }
     }
 
     async putChapter(key, verses) {
@@ -109,7 +133,7 @@
     }
 
     async clear() {
-      this.mem = { chapters: new Map(), meta: {} };
+      this.mem = { chapters: new Map(), meta: {}, reviews: new Map() };
       try {
         if (this.db) {
           await idbTx(this.db, 'chapters', 'readwrite', (s) => s.clear());
@@ -137,15 +161,18 @@
     async init() {
       const snap = await this.col.get();
       const chapters = new Map();
+      const reviews = new Map();
       let meta = {};
       snap.docs.forEach((d) => {
         const data = d.data();
         if (!data) return;
         if (d.id === 'meta') { meta = data.meta || {}; this.stamps.set('meta', data.t || 0); }
+        else if (d.id === 'reviews') { for (const [k, r] of Object.entries(data.reviews || {})) if (r && typeof r === 'object') reviews.set(k, { done: r.done === true, t: Number(r.t) || 0, by: '' }); }
         else if (data.k && Array.isArray(data.verses)) { chapters.set(data.k, data.verses.slice()); this.stamps.set(data.k, data.t || 0); }
       });
+      this.reviews = reviews;
       this.unsub = this.col.onSnapshot((s) => this._remote(s), () => {});
-      return { chapters, meta };
+      return { chapters, meta, reviews };
     }
 
     _remote(snap) {
@@ -154,6 +181,7 @@
         if (ch.doc.metadata && ch.doc.metadata.hasPendingWrites) return;
         const id = ch.doc.id;
         const data = ch.doc.data();
+        if (id === 'reviews') return;                       // only this viewer writes their own marks
         if (id === 'meta') {
           if (data && (data.t || 0) > (this.stamps.get('meta') || 0) && !this.pending.has('meta')) {
             this.stamps.set('meta', data.t || 0);
@@ -193,6 +221,7 @@
             const ref = this.col.doc(id);
             if (job.remove) await ref.delete();
             else if (id === 'meta') await ref.set({ meta: job.meta, t: job.t });
+            else if (id === 'reviews') await ref.set({ reviews: job.reviews, t: job.t });
             else await ref.set({ k: job.key, verses: job.verses, t: job.t });
           } catch (e) {
             failed = true;
@@ -221,6 +250,16 @@
       const t = Date.now();
       this.stamps.set('meta', t);
       this.pending.set('meta', { meta, t });
+      this.onStatus('saving');
+      this._schedule();
+    }
+
+    async putReview(key, done) {
+      const t = Date.now();
+      this.reviews.set(key, { done: !!done, t, by: '' });
+      const reviews = {};
+      for (const [k, r] of this.reviews) reviews[k] = r;
+      this.pending.set('reviews', { reviews, t });
       this.onStatus('saving');
       this._schedule();
     }

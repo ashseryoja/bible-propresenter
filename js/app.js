@@ -135,12 +135,13 @@
     els.titleSub = h('span.t-sub');
     els.title = h('button.title-btn', { type: 'button', 'aria-haspopup': 'dialog', onclick: () => (wide() ? sideNav.focusField() : openNavigator()) },
       h('span.t-text', els.titleMain, els.titleSub), icon('down', 'title-chev'));
+    els.review = h('button.icon-btn.review', { type: 'button', 'aria-pressed': 'false', onclick: () => toggleReview(state.b, state.c) }, icon('checkCircle'));
     els.search = h('button.icon-btn', { type: 'button', 'aria-label': t('Поиск'), title: t('Поиск') + ' ( / )', onclick: () => AB.viewTools.openSearch() }, icon('search'));
     els.badge = h('span.badge');
     els.badge.hidden = true;
     els.changes = h('button.icon-btn.has-text', { type: 'button', 'aria-haspopup': 'dialog', onclick: () => AB.viewTools.openChanges() }, icon('fileDown'), h('span.icon-text', t('Правки и экспорт')), els.badge);
     els.menu = h('button.icon-btn', { type: 'button', 'aria-label': t('Меню'), 'aria-haspopup': 'menu', 'aria-expanded': 'false', onclick: () => openMenu() }, icon('more'));
-    top.append(els.title, els.search, els.changes, els.menu);
+    top.append(els.title, els.review, els.search, els.changes, els.menu);
 
     const pager = document.getElementById('pager');
     els.prev = h('button.pg-btn', { type: 'button', onclick: () => step(-1) }, icon('left'), h('span.pg-lab'));
@@ -167,6 +168,35 @@
     els.pos.append(h('strong', String(state.c)), ' ' + t('из') + ' ' + D.chapterCount(state.b));
     els.pos.setAttribute('aria-label', t('Глава {c} из {n}. Открыть список глав', { c: state.c, n: D.chapterCount(state.b) }));
     updateBadge();
+    updateReviewBtn();
+  }
+
+  /** The check in the top bar: outline = not yet, filled green = this chapter has been read through. */
+  function updateReviewBtn() {
+    const on = D.isReviewed(state.b, state.c);
+    const label = on ? t('Глава просмотрена. Снять отметку') : t('Отметить главу как просмотренную');
+    els.review.classList.toggle('on', on);
+    els.review.setAttribute('aria-pressed', String(on));
+    els.review.setAttribute('aria-label', label);
+    els.review.title = label;
+    els.review.disabled = !!app.locked;
+    clear(els.review);
+    els.review.appendChild(icon(on ? 'checkDone' : 'checkCircle'));
+  }
+
+  /** Marks the chapter as read through, or takes the mark back. The screen changes at once; a refusal is reported and undone. */
+  function toggleReview(b, c) {
+    if (app.locked) { AB.ui.toast(t('Правки сейчас закрыты владельцем сайта.'), { kind: 'warn' }); return; }
+    const on = !D.isReviewed(b, c);
+    const p = D.setReviewed(b, c, on);
+    AB.ui.toast(on ? t('Глава отмечена как просмотренная') : t('Отметка о просмотре снята'),
+      { kind: on ? 'ok' : undefined, action: t('Отменить'), onAction: () => D.setReviewed(b, c, !on).catch(() => AB.ui.toast(t('Не получилось отменить.'), { kind: 'error' })) });
+    p.catch((e) => {
+      const refused = e && (e.code === 'permission-denied' || e.code === 'unauthenticated');
+      AB.ui.toast(refused
+        ? t('Сервер не принял отметку: правила доступа Firebase ещё не обновлены для отметок о просмотре (см. README).')
+        : t('Не удалось сохранить отметку. Проверьте связь и попробуйте ещё раз.'), { kind: 'error', duration: 9000 });
+    });
   }
 
   function updateBadge() {
@@ -341,6 +371,7 @@
 
   function setLocked(on) {
     app.locked = on;
+    updateReviewBtn();
     AB.reader.render({ keepScroll: true });
     AB.ui.toast(on ? t('Владелец сайта закрыл правки. Читать и скачивать можно.') : t('Правки снова открыты.'), { kind: on ? 'warn' : 'ok', duration: 6000 });
   }
@@ -387,6 +418,22 @@
       AB.ui.toast(t('Эту главу только что изменил {who}', { who: e.by || t('другой человек') }), { duration: 4000 });
     }
     if (e.type === 'meta') { updateChrome(); if (sideNav) sideNav.refresh(); AB.reader.render({ keepScroll: true }); return; }
+    if (e.type === 'stamp') {       // a reviewed chapter learned when it was last edited: the "edited after the review" hint
+      if (e.keys && e.keys.includes(state.b + ':' + state.c)) AB.reader.render({ keepScroll: true });
+      return;
+    }
+    if (e.type === 'review') {
+      updateReviewBtn();
+      if (sideNav) sideNav.refresh();
+      if (e.keys && e.keys.includes(state.b + ':' + state.c)) {
+        AB.reader.render({ keepScroll: true });
+        if (e.remote && app.shared) {
+          const who = e.by || t('Кто-то');
+          AB.ui.toast(D.isReviewed(state.b, state.c) ? t('{who}: эта глава отмечена как просмотренная', { who }) : t('{who}: отметка о просмотре снята', { who }), { duration: 4000 });
+        }
+      }
+      return;
+    }
     const need = (e.keys || []).map((k) => Number(k.split(':')[0])).filter((i) => !D.isLoaded(i));
     const go = () => {
       if (state.sel > D.verseCount(state.b, state.c)) state.sel = 0;
@@ -399,7 +446,7 @@
   }
 
   const app = AB.app = {
-    state, settings, setSetting, goTo, step, loadAll, ensureBook, afterEdit, undo, openEditor, afterEditorClose,
+    state, settings, setSetting, goTo, step, loadAll, ensureBook, afterEdit, undo, openEditor, afterEditorClose, toggleReview,
     openChanges: (focus) => AB.viewTools.openChanges(focus),
     openSearch: (o) => AB.viewTools.openSearch(o),
     boot, warnedStore: false, shared: false, locked: false, leftovers: null, sync: 'saved', syncListeners: new Set(), resolveLeftovers, editedLoaded: Promise.resolve(), muteRemoteUntil: 0,
