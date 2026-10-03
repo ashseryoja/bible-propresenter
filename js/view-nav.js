@@ -137,6 +137,20 @@
     });
   }
 
+  /** [from, to) in `now`: the part that differs from `was`, widened to whole words so the mark never cuts a word. */
+  function changedRange(was, now) {
+    let p = 0;
+    while (p < was.length && p < now.length && was[p] === now[p]) p++;
+    let sfx = 0;
+    while (sfx < was.length - p && sfx < now.length - p && was[was.length - 1 - sfx] === now[now.length - 1 - sfx]) sfx++;
+    let from = p, to = now.length - sfx;
+    if (from > to) from = to;
+    while (from > 0 && !/\s/.test(now[from - 1])) from--;
+    while (to < now.length && !/\s/.test(now[to])) to++;
+    if (from === to) { from = Math.max(0, from - 1); to = Math.min(now.length, to + 1); }   // only whitespace changed: mark the seam
+    return [from, to];
+  }
+
   function chapterHead(b, c, changedCount) {
     const bm = D().bookMeta(b);
     const kids = [
@@ -213,10 +227,25 @@
         return;
       }
       const vs = D().verses(b, c);
+      const base = D().baseVerses(b, c);
       const ops = D().chapterDiff(b, c);
-      const changed = new Set();
-      let touched = 0;
-      for (const o of ops) { if (o.t !== 'del') changed.add(o.b); touched += 1; }
+      const opAt = new Map();          // current verse index -> its op (chg | ins)
+      const delsBefore = new Map();    // current verse index -> base indexes of the verses deleted right before it
+      let touched = 0, dels = 0, inss = 0;
+      for (const o of ops) {
+        touched += 1;
+        if (o.t === 'del') {
+          const pos = o.a - dels + inss;    // where the deleted verse would sit in the current numbering
+          dels += 1;
+          if (!delsBefore.has(pos)) delsBefore.set(pos, []);
+          delsBefore.get(pos).push(o.a);
+        } else {
+          opAt.set(o.b, o);
+          if (o.t === 'ins') inss += 1;
+        }
+      }
+      const deletedRows = (pos) => (delsBefore.get(pos) || []).map((a) =>
+        h('div.vdel', { role: 'note', 'aria-label': t('Удалён стих {n}', { n: a + 1 }) }, h('span.vdn', String(a + 1)), h('p', { lang: 'hy' }, h('span.d-tag', t('удалён')), base[a])));
       const notes = notesFor(b, c);
       const noteVerses = new Set(notes.map((n) => n.v));
 
@@ -232,13 +261,22 @@
       const body = h('div.verses', { lang: 'hy' });
       vs.forEach((text, i) => {
         const v = i + 1;
-        const isCh = changed.has(i);
-        const row = h('article.verse' + (isCh ? '.edited' : ''), { id: 'v' + v, 'data-v': String(v), tabindex: '0', 'aria-label': t('Стих {n}', { n: v }) + (isCh ? ', ' + t('изменён') : '') },
+        body.append(...deletedRows(i));
+        const op = opAt.get(i);
+        const isCh = !!op;
+        const added = isCh && op.t === 'ins';
+        // the edited words are marked, so the reader sees what was changed without opening the list of edits
+        let content = text;
+        if (added) content = h('mark.chg', text);
+        else if (isCh) { const [from, to] = changedRange(base[op.a], text); content = [text.slice(0, from), h('mark.chg', text.slice(from, to)), text.slice(to)]; }
+        const flag = added ? t('добавлен') : t('изменён');
+        const row = h('article.verse' + (isCh ? '.edited' : ''), { id: 'v' + v, 'data-v': String(v), tabindex: '0', 'aria-label': t('Стих {n}', { n: v }) + (isCh ? ', ' + flag : '') },
           h('span.vn', { 'aria-hidden': 'true' }, String(v)),
-          h('div.vbody', h('p.vtext', text),
-            (isCh || noteVerses.has(v)) ? h('span.vflags', isCh ? h('span.vflag.edit', t('изменён')) : null, noteVerses.has(v) ? h('span.vflag.warn', { title: t('Сверить с печатной Библией') }, icon('warn'), t('сверить')) : null) : null));
+          h('div.vbody', h('p.vtext', content),
+            (isCh || noteVerses.has(v)) ? h('span.vflags', isCh ? h('span.vflag.edit', flag) : null, noteVerses.has(v) ? h('span.vflag.warn', { title: t('Сверить с печатной Библией') }, icon('warn'), t('сверить')) : null) : null));
         body.appendChild(row);
       });
+      body.append(...deletedRows(vs.length));
       host.appendChild(body);
       host.appendChild(h('p.ch-end', vs.length === 0 ? '' : num(vs.length, 'стих', 'стиха', 'стихов') + ' · ' + t('конец главы')));
 

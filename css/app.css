@@ -10,6 +10,7 @@
   --toast-bg: #1e2536; --toast-fg: #f2f4fa; --toast-action: #a9bcff;
   --sans: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --serif: 'Noto Serif Armenian', 'Sylfaen', 'Mshtakan', 'Noto Serif', 'Times New Roman', serif;
+  --text: 'Montserrat Arm', 'Noto Sans Armenian', Arial, 'Helvetica Neue', sans-serif;   /* the reading font; the menu switches it (data-font) */
   --fs: 22px;
 }
 @media (prefers-color-scheme: dark) {
@@ -34,6 +35,15 @@
   --toast-bg: #e7eaf2; --toast-fg: #141a28; --toast-action: #2f4fa0;
   color-scheme: dark;
 }
+
+/* Montserrat Arm (Montserrat by Julieta Ulanovsky, Armenian letters by Vahan Hovhannisyan; SIL OFL 1.1, see fonts/OFL.txt) */
+@font-face { font-family: 'Montserrat Arm'; font-style: normal; font-weight: 400; font-display: swap; src: url('../fonts/Montserratarm-Regular.woff') format('woff'); }
+@font-face { font-family: 'Montserrat Arm'; font-style: normal; font-weight: 500; font-display: swap; src: url('../fonts/Montserratarm-Medium.woff') format('woff'); }
+@font-face { font-family: 'Montserrat Arm'; font-style: normal; font-weight: 600 800; font-display: swap; src: url('../fonts/Montserratarm-SemiBold.woff') format('woff'); }
+/* ---- reading font (menu «Шрифт»; Montserrat Arm is the default and is served from fonts/) ---- */
+:root[data-font="noto"] { --text: 'Noto Sans Armenian', Arial, 'Helvetica Neue', sans-serif; }
+:root[data-font="arial"] { --text: Arial, 'Helvetica Neue', Helvetica, 'Noto Sans Armenian', sans-serif; }
+:root[data-font="serif"] { --text: var(--serif); }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
@@ -63,7 +73,7 @@ kbd { font: 500 12px var(--sans); padding: 1px 6px; border: 1px solid var(--line
 .title-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; min-height: 46px; padding: 2px 10px; background: none; border: 0; border-radius: 12px; text-align: left; }
 .title-btn:hover { background: var(--surface-2); }
 .t-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-.t-main { font: 600 20px/1.2 var(--serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-main { font: 600 20px/1.2 var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .t-sub { font-size: 13px; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .title-chev { color: var(--fg-2); flex: none; }
 
@@ -127,7 +137,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 
 /* ---- reader ---- */
 .chead { padding: 18px 2px 6px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.ch-book { margin: 0; font: 600 32px/1.15 var(--serif); }
+.ch-book { margin: 0; font: 600 32px/1.15 var(--text); }
 .ch-sub { margin: 2px 0 0; color: var(--fg-2); font-size: 15px; }
 .ch-hint { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--fg-2); font-size: 14px; }
 .hint-card, .note-card { display: flex; align-items: flex-start; gap: 12px; margin: 10px 0; padding: 12px 8px 12px 14px; border-radius: 14px; background: var(--accent-soft); font-size: 15px; }
@@ -153,8 +163,16 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .verse.flash { animation: flash 2.2s ease-out; }
 .vn { font: 600 .68em/2.3 var(--sans); color: var(--verse-num); text-align: right; padding-top: .18em; font-variant-numeric: tabular-nums; user-select: none; }
 .vbody { min-width: 0; }
-.vtext { margin: 0; font-family: var(--serif); line-height: 1.62; overflow-wrap: break-word; hyphens: auto; }
+.vtext { margin: 0; font-family: var(--text); line-height: 1.62; overflow-wrap: break-word; hyphens: auto; }
 .vflags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; font-family: var(--sans); }
+/* edited places: the changed words of an edited verse, or the whole text of an added verse (menu «Подсветка правок») */
+.vtext mark.chg { background: var(--edit-soft); color: var(--edit-fg); border-radius: 4px; padding: 0 3px; margin: 0 -1px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+:root[data-hl="off"] .vtext mark.chg { background: none; color: inherit; padding: 0; margin: 0; }
+.vdel { display: grid; grid-template-columns: 1.7em minmax(0, 1fr); column-gap: 8px; margin: 0 -6px; padding: 2px 8px 4px 4px; color: var(--fg-2); font-size: .74em; }
+.vdn { font: 600 .9em/1.75 var(--sans); color: var(--danger); text-align: right; font-variant-numeric: tabular-nums; }
+.vdel p { margin: 0; font-family: var(--text); line-height: 1.5; text-decoration: line-through; text-decoration-color: var(--danger); overflow-wrap: break-word; }
+.vdel .d-tag { text-decoration: none; display: inline-block; margin-right: 6px; color: var(--danger); }
+:root[data-hl="off"] .vdel { display: none; }
 .vflag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 99px; font: 500 12px/1.6 var(--sans); }
 .vflag .ico { width: 13px; height: 13px; }
 .vflag.edit { background: var(--edit-soft); color: var(--edit-fg); }
@@ -182,7 +200,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .sheet-head-row { display: flex; align-items: center; gap: 8px; padding: 0 0 8px; }
 .sheet-titles { flex: 1; min-width: 0; }
 .sheet-title { margin: 0; font: 600 19px/1.25 var(--sans); }
-.sheet-sub { margin: 2px 0 0; color: var(--fg-2); font: 14px var(--serif); }
+.sheet-sub { margin: 2px 0 0; color: var(--fg-2); font: 14px var(--text); }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 16px 20px; -webkit-overflow-scrolling: touch; }
 .sheet-foot { flex: none; padding: 10px 16px 12px; border-top: 1px solid var(--line); background: var(--surface); }
 .foot-row { display: flex; gap: 10px; }
@@ -195,13 +213,13 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .ed-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ed-pos { color: var(--fg-2); font-size: 14px; }
 .ed-field { display: flex; flex-direction: column; gap: 4px; }
-.ed-text { width: 100%; min-height: 7em; padding: 14px; resize: none; border: 1.5px solid var(--line-strong); border-radius: 14px; background: var(--bg); color: var(--fg); font: 400 max(20px, calc(var(--fs) - 1px))/1.6 var(--serif); }
+.ed-text { width: 100%; min-height: 7em; padding: 14px; resize: none; border: 1.5px solid var(--line-strong); border-radius: 14px; background: var(--bg); color: var(--fg); font: 400 max(20px, calc(var(--fs) - 1px))/1.6 var(--text); }
 .ed-text:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ed-meta { display: flex; justify-content: flex-end; font-size: 13px; color: var(--fg-2); }
 .ed-count.warn { color: var(--edit-fg); }
 .ed-count.bad { color: var(--danger); font-weight: 600; }
 .marks { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-.mark { min-height: 46px; padding: 0; position: relative; border: 1px solid var(--line-strong); border-radius: 11px; background: var(--surface); color: var(--fg); font: 500 21px var(--serif); }
+.mark { min-height: 46px; padding: 0; position: relative; border: 1px solid var(--line-strong); border-radius: 11px; background: var(--surface); color: var(--fg); font: 500 21px var(--text); }
 .mark:hover { background: var(--surface-2); }
 .mk-base { color: var(--fg-2); font-size: 15px; margin-right: -3px; }
 .mark:active { background: var(--accent-soft); }
@@ -212,7 +230,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .orig { padding: 10px 12px 12px; border: 1px dashed var(--line-strong); border-radius: 12px; }
 .orig-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .orig-title { font: 600 12px var(--sans); text-transform: uppercase; letter-spacing: .06em; color: var(--fg-2); }
-.orig-text { margin: 4px 0 0; color: var(--fg-2); font: 16.5px/1.55 var(--serif); }
+.orig-text { margin: 4px 0 0; color: var(--fg-2); font: 16.5px/1.55 var(--text); }
 .orig-note { display: flex; gap: 8px; align-items: center; margin: 0; color: var(--fg-2); font-size: 14px; }
 .ed-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .discard-text { margin: 0; text-align: center; font-weight: 500; }
@@ -239,7 +257,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .nb-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 6px 4px; border: 0; background: none; text-align: left; border-radius: 10px; }
 .nb-head:hover { background: var(--surface-2); }
 .nb-names { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.nb-hy { font: 600 17.5px/1.25 var(--serif); }
+.nb-hy { font: 600 17.5px/1.25 var(--text); }
 .nb-ru { font-size: 13.5px; color: var(--fg-2); }
 .nb-count { font-size: 13px; color: var(--fg-2); font-variant-numeric: tabular-nums; }
 .nb-chev { color: var(--fg-2); }
@@ -261,8 +279,8 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .hit:hover { background: var(--surface-2); }
 .hit-ref { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .hit-ru { font: 600 14px var(--sans); color: var(--verse-num); }
-.hit-hy { font: 13px var(--serif); color: var(--fg-2); }
-.hit-text { font: 17px/1.55 var(--serif); overflow-wrap: break-word; }
+.hit-hy { font: 13px var(--text); color: var(--fg-2); }
+.hit-text { font: 17px/1.55 var(--text); overflow-wrap: break-word; }
 .hit-text.was { color: var(--fg-2); }
 .hit-text.was mark { background: var(--danger-soft); text-decoration: line-through; }
 .hit-text.will mark { background: var(--ok-soft); }
@@ -300,13 +318,13 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .chg[open] { border-color: var(--line-strong); }
 .chg summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 54px; padding: 8px 14px; list-style: none; cursor: pointer; }
 .chg summary::-webkit-details-marker { display: none; }
-.chg-ref { display: flex; flex-direction: column; font: 600 16.5px/1.25 var(--serif); }
+.chg-ref { display: flex; flex-direction: column; font: 600 16.5px/1.25 var(--text); }
 .chg-ru { font: 400 13px var(--sans); color: var(--fg-2); }
 .chg-sum { font-size: 13px; color: var(--edit-fg); text-align: right; }
 .chg-body { padding: 0 14px 14px; }
 .d-row { display: grid; grid-template-columns: 1.8rem minmax(0, 1fr); gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
 .d-num { font: 600 13px/1.9 var(--sans); color: var(--verse-num); text-align: right; }
-.d-cols p { margin: 0 0 6px; font: 16px/1.5 var(--serif); overflow-wrap: break-word; }
+.d-cols p { margin: 0 0 6px; font: 16px/1.5 var(--text); overflow-wrap: break-word; }
 .d-old { color: var(--fg-2); }
 .d-old mark { background: var(--danger-soft); }
 .d-new mark { background: var(--ok-soft); }
@@ -321,7 +339,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .note-card.lock .note-ico { color: var(--danger); }
 .remote-box { padding: 12px 14px; border-radius: 12px; background: var(--edit-soft); }
 .remote-box p { margin: 0 0 8px; }
-.remote-text { font: 17px/1.55 var(--serif); }
+.remote-text { font: 17px/1.55 var(--text); }
 .sync { color: var(--fg); font-weight: 500; }
 .hist-list { display: flex; flex-direction: column; margin-top: 8px; }
 .history .muted .spinner { margin-right: 8px; }
@@ -332,7 +350,7 @@ button.chip { min-height: 44px; padding: 0 14px; }
 .nm-row > .icon-btn { grid-column: 3; }
 .nm-row:not(.changed) > .icon-btn { display: none; }
 .nm-ru { font-size: 14px; color: var(--fg-2); }
-.nm-row .field { font-family: var(--serif); }
+.nm-row .field { font-family: var(--text); }
 .nm-row.changed .field { border-color: var(--edit); }
 
 /* help */
@@ -356,6 +374,8 @@ html.sheet-open #toasts { bottom: auto; top: calc(12px + env(safe-area-inset-top
 .menu-row.stack { flex-direction: column; align-items: stretch; gap: 6px; padding-top: 8px; padding-bottom: 8px; }
 .menu-row.stack .seg { display: flex; }
 .menu-row.stack .seg-btn { flex: 1; padding: 0 6px; }
+.seg.wrap { flex-wrap: wrap; }
+.seg.wrap .seg-btn { flex: 1 1 46%; }
 .menu-lab { display: flex; align-items: center; gap: 10px; font-size: 15px; }
 .menu-stepper { display: flex; align-items: center; }
 .menu-size { min-width: 2.2em; text-align: center; font-variant-numeric: tabular-nums; font-weight: 500; }

@@ -11,7 +11,8 @@
 
   const FS_MIN = 16, FS_MAX = 36, FS_STEP = 2;
   const state = { b: 1, c: 1, sel: 0 };
-  const settings = Object.assign({ fs: window.innerWidth < 480 ? 20 : 22, theme: 'auto', onboarded: false, name: '' }, store.get('ab.settings', {}));
+  const FONTS = ['montserrat', 'noto', 'arial', 'serif'];
+  const settings = Object.assign({ fs: window.innerWidth < 480 ? 20 : 22, theme: 'auto', font: 'montserrat', hl: true, onboarded: false, name: '' }, store.get('ab.settings', {}));
   let navToken = 0;
   let sideNav = null;
   const els = {};
@@ -21,6 +22,8 @@
   function applySettings() {
     const root = document.documentElement;
     root.style.setProperty('--fs', Math.min(FS_MAX, Math.max(FS_MIN, settings.fs)) + 'px');
+    root.setAttribute('data-font', FONTS.includes(settings.font) ? settings.font : FONTS[0]);
+    root.setAttribute('data-hl', settings.hl === false ? 'off' : 'on');
     if (!AB.platform.hosted) {            // inside the viewer the theme belongs to the viewer
       if (settings.theme === 'light' || settings.theme === 'dark') root.setAttribute('data-theme', settings.theme);
       else root.removeAttribute('data-theme');
@@ -194,20 +197,30 @@
     const plus = h('button.icon-btn.small', { type: 'button', 'aria-label': t('Крупнее'), onclick: () => setSize(FS_STEP) }, h('span.a-big', 'A'));
     size.textContent = String(settings.fs);
     const item = (ico, label, fn, disabled) => h('button.menu-item', { type: 'button', role: 'menuitem', disabled: disabled ? true : null, onclick: () => { pop(); fn(); } }, icon(ico), h('span', label));
-    const items = [
-      h('div.menu-row', h('span.menu-lab', icon('type'), t('Размер текста')), h('span.menu-stepper', minus, size, plus)),
-    ];
-    if (!AB.platform.hosted) {
-      const seg = h('div.seg.small', { role: 'group', 'aria-label': t('Тема') });
-      for (const [val, label] of [['auto', t('Авто')], ['light', t('Светлая')], ['dark', t('Тёмная')]]) {
-        seg.appendChild(h('button.seg-btn' + (settings.theme === val ? '.on' : ''), { type: 'button', 'aria-pressed': String(settings.theme === val), onclick: (e) => {
-          setSetting('theme', val);
+    /** A row of choices for one setting: [value, label, style?] */
+    const segRow = (ico, label, key, choices, wrap) => {
+      const seg = h('div.seg.small' + (wrap ? '.wrap' : ''), { role: 'group', 'aria-label': label });
+      for (const [val, text, style] of choices) {
+        const btn = h('button.seg-btn' + (settings[key] === val ? '.on' : ''), { type: 'button', 'aria-pressed': String(settings[key] === val), onclick: (e) => {
+          setSetting(key, val);
           seg.querySelectorAll('.seg-btn').forEach((n) => { n.classList.remove('on'); n.setAttribute('aria-pressed', 'false'); });
           e.currentTarget.classList.add('on'); e.currentTarget.setAttribute('aria-pressed', 'true');
-        } }, label));
+        } }, text);
+        if (style) btn.style.fontFamily = style;
+        seg.appendChild(btn);
       }
-      items.push(h('div.menu-row.stack', h('span.menu-lab', icon('sun'), t('Тема')), seg));
-    }
+      return h('div.menu-row.stack', h('span.menu-lab', icon(ico), label), seg);
+    };
+    const items = [
+      h('div.menu-row', h('span.menu-lab', icon('type'), t('Размер текста')), h('span.menu-stepper', minus, size, plus)),
+      segRow('type', t('Шрифт'), 'font', [
+        ['montserrat', 'Montserrat', "'Montserrat Arm', 'Noto Sans Armenian', Arial, sans-serif"],
+        ['noto', 'Noto Sans', "'Noto Sans Armenian', Arial, sans-serif"],
+        ['arial', 'Arial', "Arial, 'Helvetica Neue', sans-serif"],
+        ['serif', t('С засечками'), "'Noto Serif Armenian', serif"]], true),
+      segRow('pencil', t('Подсветка правок'), 'hl', [[true, t('Вкл')], [false, t('Выкл')]]),
+    ];
+    if (!AB.platform.hosted) items.push(segRow('sun', t('Тема'), 'theme', [['auto', t('Авто')], ['light', t('Светлая')], ['dark', t('Тёмная')]]));
     items.push(h('hr.menu-sep'));
     items.push(item('undo', D.canUndo() ? t('Отменить: {l}', { l: D.lastLabel() }) : t('Отменить последнее'), undo, !D.canUndo()));
     items.push(item('search', t('Найти и заменить'), () => AB.viewTools.openSearch({ replace: true })));
