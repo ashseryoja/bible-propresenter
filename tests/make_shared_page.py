@@ -9,7 +9,7 @@ src = re.sub(r"<script>\s*// firebase: null.*?</script>",
              "<script>window.AB = { config: { dataMode: 'script', dataBase: '../data/', firebase: { app: { projectId: 'mock' }, sdkBase: '/tests/mock-sdk/' } } };</script>",
              src, count=1, flags=re.S)
 assert 'sdkBase' in src
-src = src.replace('<title>Библия Ararat</title>', '<title>Библия Ararat (тест общей версии)</title>')
+src = src.replace('<title>Армянская Библия</title>', '<title>Армянская Библия (тест общей версии)</title>')
 with open(os.path.join(HERE, 'shared.html'), 'w', encoding='utf-8') as f:
     f.write(src)
 print('tests/shared.html written')

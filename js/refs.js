@@ -1,6 +1,6 @@
 /*
  * References: understanding "Ин 3:16", "1 Кор 13", "Հով 3:16", "Псалом 22" and the Psalm numbering difference.
- * Հին Արարատ numbers the Psalms the Hebrew way; Russian Bibles use the Greek/Slavonic way.
+ * This Bible numbers the Psalms the Hebrew way (as Armenian Bibles do); Russian Bibles use the Greek/Slavonic way.
  */
 (function () {
   'use strict';

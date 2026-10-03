@@ -6,8 +6,8 @@
   'use strict';
   const AB = (globalThis.AB = globalThis.AB || {});
 
-  const DEFAULT_META = { name: 'Armenian Old Ararat', abbr: 'ARARAT', slotAbbr: 'ACV' };
-  const ALLOWED = /^[Ա-Ֆա-ֆև\s,.։\-()\[\]«»…՛՜՝՞՚]+$/;
+  const DEFAULT_META = { name: 'Armenian Bible', abbr: 'ARM', slotAbbr: 'ACV' };
+  const ALLOWED = /^[Ա-Ֆա-ֆև\s0-9,.։\-–()\[\]«»…՛՜՝՞՚]+$/;   // digits, dashes: the translation's own explanations
   const MAX_VERSE_BYTES = 3800;    // a row has to fit into one 4 KiB database page
 
   function xmlEscape(s) {
@@ -114,7 +114,7 @@
       { name: 'README.txt', data: enc.encode(readmeText(meta, built.stats, when)) },
     ], { date: when });
     const stamp = when.toISOString().slice(0, 10);
-    return { bytes, filename: 'ararat-propresenter-' + stamp + '.zip', stats: built.stats, warnings: built.warnings, dbSize: built.db.length };
+    return { bytes, filename: 'armbible-propresenter-' + stamp + '.zip', stats: built.stats, warnings: built.warnings, dbSize: built.db.length };
   }
 
   AB.exporter = { DEFAULT_META, validate, buildModule, buildZip, metadataXml, readmeText, cleanText };

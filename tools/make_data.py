@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate the site's text data from the module that was built for ProPresenter.
 
-Source of truth: ../../ararat-old/bible.db3  (the delivered module, apostrophes already removed), so the site
-shows exactly what the module contains and what an unedited export reproduces.
+Source of truth: ../../armbible/bible.db3  (the module built from the user's ArmBible-ՓՈՐՁ.spb, see
+../../armbible/README.md), so the site shows exactly what the module contains and what an unedited export reproduces.
 
 Writes
   data/index.js        book list, chapter verse counts, Russian names, notes      (loaded with <script>)
@@ -13,7 +13,7 @@ import json, os, sqlite3, sys, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.abspath(os.path.join(HERE, '..'))
-DB = os.path.abspath(os.path.join(SITE, '..', 'ararat-old', 'bible.db3'))
+DB = os.path.abspath(os.path.join(SITE, '..', 'armbible', 'bible.db3'))
 
 RU = [
  ('Бытие', 'Быт'), ('Исход', 'Исх'), ('Левит', 'Лев'), ('Числа', 'Чис'), ('Второзаконие', 'Втор'),
@@ -32,12 +32,8 @@ RU = [
  ('3 Иоанна', '3 Ин'), ('Иуды', 'Иуд'), ('Откровение', 'Откр'),
 ]
 
-# verses the reader should double-check against a printed Old Ararat (book index, chapter, verse) -> note
-NOTES = {
-    '24:50:41': 'Этих стихов нет ни на одном из онлайн-изданий. Текст восстановлен по прежнему модулю и переписан в старую орфографию — сверьте с печатной Библией.',
-    '24:50:42': None, '24:50:43': None, '24:50:44': None, '24:50:45': None, '24:50:46': None,
-}
-NOTES = {k: (v or NOTES['24:50:41']) for k, v in NOTES.items()}
+# verses the reader should double-check: 'book:chapter:verse' -> note shown with a ⚠ sign (none for this text)
+NOTES = {}
 
 
 def main():
@@ -70,7 +66,7 @@ def main():
             f.write('window.AB=window.AB||{};AB.data=AB.data||{};AB.data[%d]=%s;\n' % (bi, blob))
         with open(os.path.join(SITE, 'data', 'json', 'b%02d.json' % bi), 'w', encoding='utf-8') as f:
             f.write(blob)
-    index = {'version': 'ararat-1896:' + sha.hexdigest()[:12], 'books': index_books, 'notes': NOTES}
+    index = {'version': 'armbible:' + sha.hexdigest()[:12], 'books': index_books, 'notes': NOTES}
     with open(os.path.join(SITE, 'data', 'index.js'), 'w', encoding='utf-8') as f:
         f.write('window.AB=window.AB||{};AB.index=%s;\n' % json.dumps(index, ensure_ascii=False, separators=(',', ':')))
     print('books', len(books), 'chapters', sum(len(b['vs']) for b in index_books),

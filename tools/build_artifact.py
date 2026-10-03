@@ -20,7 +20,7 @@ DIST = os.path.join(SITE, 'dist')
 
 FONTS = ('https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700'
          '&family=Noto+Serif+Armenian:wght@400;500;600&display=swap')
-TITLE = 'Библия Ararat'
+TITLE = 'Армянская Библия'
 
 # order matters: every file may use what the earlier ones define
 JS_ORDER = ['fold', 'sqlite-writer', 'zip', 'exporter', 'platform', 'store', 'data', 'i18n', 'refs',

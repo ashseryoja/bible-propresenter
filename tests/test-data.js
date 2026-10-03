@@ -80,15 +80,15 @@ const D = AB.Data;
   ok(D.search('   ').hits.length === 0, 'empty query');
 
   // replace
-  const before = D.findLiteral('Եհովա').length;
-  ok(before > 500, 'many Եհովա: ' + before);
-  const r = D.replaceLiteral('Եհովա', 'Տէր');
-  ok(r.count > 500 && D.findLiteral('Եհովա').length === 0, 'replaced all: ' + r.count);
+  const before = D.findLiteral('Երուսաղեմ').length;
+  ok(before > 500, 'many Երուսաղեմ: ' + before);
+  const r = D.replaceLiteral('Երուսաղեմ', 'Երուսաղէմ');
+  ok(r.count > 500 && D.findLiteral('Երուսաղեմ').length === 0, 'replaced all: ' + r.count);
   ok(D.summary().touched > 500, 'summary counts replaced verses ' + D.summary().touched);
   const exported = D.exportBooks();
   ok(exported.length === 66 && exported[0].chapters.length === 50, 'exportBooks shape');
   D.undo();
-  ok(D.findLiteral('Եհովա').length === before && D.summary().touched === 0, 'undo of replace');
+  ok(D.findLiteral('Երուսաղեմ').length === before && D.summary().touched === 0, 'undo of replace');
 
   // backup round trip
   D.setVerse(43, 3, 16, 'Փորձ');

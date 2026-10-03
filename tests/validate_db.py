@@ -7,8 +7,8 @@ import json, os, sqlite3, sys, zipfile
 
 D = sys.argv[1]
 HERE = os.path.dirname(os.path.abspath(__file__))
-REF_DB = os.path.abspath(os.path.join(HERE, '..', '..', 'ararat-old', 'bible.db3'))
-REF_DDL = os.path.abspath(os.path.join(HERE, '..', '..', 'ararat-old', 'tools', 'ddl_reference.json'))
+REF_DB = os.path.abspath(os.path.join(HERE, '..', '..', 'armbible', 'bible.db3'))
+REF_DDL = os.path.abspath(os.path.join(HERE, '..', '..', 'armbible', 'tools', 'ddl_reference.json'))
 ok = True
 
 
@@ -80,7 +80,7 @@ for tbl in ('books', 'chapters', 'verses', 'ZBOOK', 'ZCHAPTER', 'ZVERSE', 'Z_PRI
 plan = con.execute("explain query plan select * from ZVERSE where ZTOCHAPTER=5").fetchall()
 check(any('ZVERSE_ZTOCHAPTER_INDEX' in str(r) for r in plan), 'query planner uses ZVERSE_ZTOCHAPTER_INDEX')
 xml = open(os.path.join(D, 'baseline.xml'), encoding='utf-8').read()
-check(xml == open(os.path.join(HERE, '..', '..', 'ararat-old', 'rvmetadata.xml'), encoding='utf-8').read(), 'baseline rvmetadata.xml identical to the delivered one')
+check(xml == open(os.path.join(HERE, '..', '..', 'armbible', 'rvmetadata.xml'), encoding='utf-8').read(), 'baseline rvmetadata.xml identical to the delivered one')
 
 # ---- edited / tiny / big -------------------------------------------------------------------------------------------
 for name in ('edited', 'tiny', 'big'):

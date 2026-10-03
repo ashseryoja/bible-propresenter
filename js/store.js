@@ -10,7 +10,7 @@
   'use strict';
   const AB = (globalThis.AB = globalThis.AB || {});
 
-  const IDB_NAME = 'ararat-bible-edits';
+  const IDB_NAME = 'armbible-edits';          // renamed when the base text changed (2026-10-03): old local edits no longer apply
 
   function idbOpen() {
     return new Promise((resolve, reject) => {
@@ -64,7 +64,7 @@
       } catch (e) {
         this.db = null;
         try {
-          const raw = AB.platform.safeStorage.get('ab.edits', null);
+          const raw = AB.platform.safeStorage.get('ab.edits2', null);
           if (raw) {
             for (const [k, v] of Object.entries(raw.chapters || {})) if (Array.isArray(v)) chapters.set(k, v);
             meta = raw.meta || {};
@@ -80,7 +80,7 @@
     _persistLs() {
       const chapters = {};
       for (const [k, v] of this.mem.chapters) chapters[k] = v;
-      const ok = AB.platform.safeStorage.set('ab.edits', { chapters, meta: this.mem.meta });
+      const ok = AB.platform.safeStorage.set('ab.edits2', { chapters, meta: this.mem.meta });
       this.persistent = ok;
       if (!ok) this.onStatus('error');
     }
@@ -114,7 +114,7 @@
         if (this.db) {
           await idbTx(this.db, 'chapters', 'readwrite', (s) => s.clear());
           await idbTx(this.db, 'meta', 'readwrite', (s) => s.clear());
-        } else if (this.useLs) AB.platform.safeStorage.remove('ab.edits');
+        } else if (this.useLs) AB.platform.safeStorage.remove('ab.edits2');
       } catch (e) { this.onStatus('error'); }
     }
   }

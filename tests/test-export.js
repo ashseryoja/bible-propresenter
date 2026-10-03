@@ -32,11 +32,11 @@ const assert = (c, m) => { if (!c) { console.error('ASSERT FAILED:', m); process
   console.log('baseline db built in', Date.now() - t0, 'ms;', built.db.length, 'bytes;', JSON.stringify(built.stats));
   fs.writeFileSync(path.join(out, 'baseline.db3'), built.db);
   fs.writeFileSync(path.join(out, 'baseline.xml'), built.xml);
-  assert(built.stats.books === 66 && built.stats.chapters === 1189 && built.stats.verses === 31097, 'baseline stats');
+  assert(built.stats.books === 66 && built.stats.chapters === 1189 && built.stats.verses === 31098, 'baseline stats');
 
   // 2. edited: change text, insert, delete, rename, long verse
   const ed = clone(base);
-  ed[18].chapters[22][0] = 'Փորձնական ստուգում. Տէրն է իմ հովիւը։';           // Psalm 23:1
+  ed[18].chapters[22][0] = 'Փորձնական ստուգում. Տերն է իմ հովիվը։';           // Psalm 23:1
   ed[18].chapters[22].push('Նոր ավելացրած չորրորդ վեց։');                        // extra verse at the end
   ed[0].chapters[0].splice(2, 1);                                                   // delete Genesis 1:3
   ed[43].chapters[0][0] = 'Ա'.repeat(1200);                                        // long verse (2400 bytes)
@@ -45,7 +45,7 @@ const assert = (c, m) => { if (!c) { console.error('ASSERT FAILED:', m); process
   fs.writeFileSync(path.join(out, 'edited.db3'), built2.db);
   fs.writeFileSync(path.join(out, 'edited.xml'), built2.xml);
   fs.writeFileSync(path.join(out, 'edited.expected.json'), JSON.stringify(ed.map((b) => ({ idx: b.idx, name: b.name, chapters: b.chapters.map((c) => c.map(AB.exporter.cleanText)) }))));
-  assert(built2.stats.verses === 31097, 'edited verse count (one added, one removed)');
+  assert(built2.stats.verses === 31098, 'edited verse count (one added, one removed)');
   assert(built2.xml.includes('Test &amp; &quot;Ararat&quot; &lt;edit&gt;'), 'xml escaping');
 
   // 3. zip
